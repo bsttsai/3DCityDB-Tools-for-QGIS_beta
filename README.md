@@ -1,3 +1,3 @@
 # 3DCityDB-Tools-for-QGIS_beta
-This repository contains the trial update on the server-side of 3DCityDB-Tools-for-QGIS tailored for 3DCityDB v. 5.0.
-The development of this plugin is continued from https://github.com/tudelft3d/3DCityDB-Tools-for-QGIS of TU Delft. There, you can find the most up-to-date versions of the "3DCityDB-Tools-for-QGIS"
+This repository contains the trial update on the server-side of 3DCityDB-Tools-for-QGIS tailored for 3DCityDB v. 5.0, which is the work of the master thesis titled "3DCityDB-Tools plug-in for QGIS: Adding server-side support to 3DCityDB v.5"
+The development of the 3DCityDB-Tools plug-in for QGIS can be found in this repository (https://github.com/tudelft3d/3DCityDB-Tools-for-) of TU Delft.
