@@ -1219,7 +1219,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.objectclass_id_to_alias(integer) FROM PUBLIC
 /*  The function looks up the id of the given classname in table objectclass */
 DROP FUNCTION IF EXISTS qgis_pkg.classname_to_objectclass_id(varchar, text);
 CREATE OR REPLACE FUNCTION qgis_pkg.classname_to_objectclass_id(
-	cdv_schema varchar,
+	cdb_schema varchar,
 	classname text
 ) 
 RETURNS integer 
