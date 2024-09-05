@@ -24,221 +24,230 @@ COMMENT ON TABLE qgis_pkg.usr_schema IS 'List of schemas for qgis users';
 CREATE INDEX usr_schema_user_name_idx   ON qgis_pkg.usr_schema (usr_name);
 CREATE INDEX usr_schema_user_schema_idx ON qgis_pkg.usr_schema (usr_schema);
 
+
 DO $MAINBODY$
 DECLARE
 cdb_schema 		varchar;
 sql_statement	varchar;
 
 BEGIN
-cdb_schema := (SELECT current_database());
-RAISE NOTICE 'Current database: "%"', cdb_schema;
+	SELECT nspname INTO cdb_schema
+	FROM pg_namespace
+	WHERE nspname NOT LIKE 'pg_%'   -- Exclude system schemas
+		AND nspname != 'information_schema'
+		AND nspname = 'citydb';
+	IF cdb_schema IS NULL THEN
+		RAISE EXCEPTION '3DCityDB is not set up yet, please install it first!';
+	ELSE
+		RAISE NOTICE 'Referencing from the default 3DCityDB schema: "%"', cdb_schema;
+	END IF;
 
-----------------------------------------------------------------
--- TABLE QGIS_PKG.CLASSNAME_LOOKUP
-----------------------------------------------------------------
-/*  Create metadata table of classname aliases for the feature that is not abstract */
-sql_statement := concat('
-DROP TABLE IF EXISTS qgis_pkg.classname_lookup CASCADE;
-CREATE TABLE         qgis_pkg.classname_lookup AS
-(
-	SELECT 
-		o.id 				AS oc_id, 
-		o.classname			AS oc_name,
-		CASE o.classname
-			WHEN ''Address''                       THEN ''address''
-			WHEN ''ClosureSurface''                THEN ''closure_surf''
-			WHEN ''CityModel''                     THEN ''ct_model''
-			WHEN ''ImplicitGeometry''              THEN ''implicit_geom''
-			WHEN ''GenericLogicalSpace''           THEN ''gen_log_space''
-			WHEN ''GenericOccupiedSpace''          THEN ''gen_occ_space''
-			WHEN ''GenericUnoccupiedSpace''        THEN ''gen_unocc_space''
-			WHEN ''GenericThematicSurface''        THEN ''gen_them_surf''
-			WHEN ''LandUse''                       THEN ''luse''
-			WHEN ''PointCloud''                    THEN ''pcl''
-			WHEN ''ReliefFeature''                 THEN ''rel_feat''
-			WHEN ''TINRelief''                     THEN ''rel_tin''
-			WHEN ''MassPointRelief''               THEN ''rel_masspoint''
-			WHEN ''BreaklineRelief''               THEN ''rel_breakline''
-			WHEN ''RasterRelief''                  THEN ''rel_raster''
-			WHEN ''Railway''                       THEN ''trn_railway''
-			WHEN ''Section''                       THEN ''trn_section''
-			WHEN ''Waterway''                      THEN ''trn_waterway''
-			WHEN ''Intersection''                  THEN ''trn_intersec''
-			WHEN ''Square''                        THEN ''trn_square''
-			WHEN ''Track''                         THEN ''trn_track''
-			WHEN ''Road''                          THEN ''trn_road''
-			WHEN ''AuxiliaryTrafficSpace''         THEN ''trn_aux_traffic_space''
-			WHEN ''ClearanceSpace''                THEN ''trn_clearance_space''
-			WHEN ''TrafficSpace''                  THEN ''trn_traffic_space''
-			WHEN ''Hole''                          THEN ''trn_hole''
-			WHEN ''AuxiliaryTrafficArea''          THEN ''trn_aux_traffic_area''
-			WHEN ''TrafficArea''                   THEN ''trn_traf_area''
-			WHEN ''Marking''                       THEN ''trn_marking''
-			WHEN ''HoleSurface''                   THEN ''trn_hole_surf''
-			WHEN ''OtherConstruction''             THEN ''con_other''
-			WHEN ''Door''                          THEN ''door''
-			WHEN ''Window''                        THEN ''window''
-			WHEN ''WallSurface''                   THEN ''wallsurf''
-			WHEN ''GroundSurface''                 THEN ''groundsurf''
-			WHEN ''InteriorWallSurface''           THEN ''interior_wallsurf''
-			WHEN ''RoofSurface''                   THEN ''roofsurf''
-			WHEN ''FloorSurface''                  THEN ''floorsurf''
-			WHEN ''OuterFloorSurface''             THEN ''outer_floorsurf''
-			WHEN ''CeilingSurface''                THEN ''ceilingsurf''
-			WHEN ''OuterCeilingSurface''           THEN ''outer_ceilingsurf''
-			WHEN ''DoorSurface''                   THEN ''doorsurf''
-			WHEN ''WindowSurface''                 THEN ''windowsurf''
-			WHEN ''Tunnel''                        THEN ''tun''
-			WHEN ''TunnelPart''                    THEN ''tun_part''
-			WHEN ''TunnelConstructiveElement''     THEN ''tun_constr_elem''
-			WHEN ''HollowSpace''                   THEN ''tun_hollow_space''
-			WHEN ''TunnelInstallation''            THEN ''tun_inst''
-			WHEN ''TunnelFurniture''               THEN ''tun_frn''
-			WHEN ''Building''                      THEN ''bdg''
-			WHEN ''BuildingPart''                  THEN ''bdg_part''
-			WHEN ''BuildingConstructiveElement''   THEN ''bdg_constr_elem''
-			WHEN ''BuildingRoom''                  THEN ''bdg_room''
-			WHEN ''BuildingInstallation''          THEN ''bdg_inst''
-			WHEN ''BuildingFurniture''             THEN ''bdg_frn''
-			WHEN ''BuildingUnit''                  THEN ''bdg_unit''
-			WHEN ''Storey''                        THEN ''bdg_storey''
-			WHEN ''Bridge''                        THEN ''bri''
-			WHEN ''BridgePart''                    THEN ''bri_part''
-			WHEN ''BridgeConstructiveElement''     THEN ''bri_constr_elem''
-			WHEN ''BridgeRoom''                    THEN ''bri_room''
-			WHEN ''BridgeInstallation''            THEN ''bri_inst''
-			WHEN ''BridgeFurniture''               THEN ''bri_frn''
-			WHEN ''CityObjectGroup''               THEN ''cityobj_grp''
-			WHEN ''SolitaryVegetationObject''      THEN ''sol_veg_obj''
-			WHEN ''PlantCover''                    THEN ''plant_cover''
-			WHEN ''WaterBody''                     THEN ''wtr_body''
-			WHEN ''WaterSurface''                  THEN ''wtr_surf''
-			WHEN ''WaterGroundSurface''            THEN ''wtr_groundsurf''
-			WHEN ''CityFurniture''                 THEN ''city_frn''
-		END AS oc_alias,
-		CASE n.alias 
-			WHEN ''core'' THEN ''Core''
-			WHEN ''dyn''  THEN ''Dynamizer''
-			WHEN ''gen''  THEN ''Generics''
-			WHEN ''luse'' THEN ''Landuse''
-			WHEN ''pcl''  THEN ''Pointcloud''
-			WHEN ''dem''  THEN ''Relief''
-			WHEN ''tran'' THEN ''Transportation''
-			WHEN ''con''  THEN ''Construction''
-			WHEN ''tun'' 	THEN ''Tunnel''
-			WHEN ''bldg'' THEN ''Building''
-			WHEN ''brid'' THEN ''Bridge''
-			WHEN ''app''  THEN ''Appearance''
-			WHEN ''grp''  THEN ''Cityobjectgroup''
-			WHEN ''veg''  THEN ''Vegetation''
-			WHEN ''vers'' THEN ''Versions''
-			WHEN ''wtr''  THEN ''Waterbody''
-			WHEN ''frn''  THEN ''Cityfurniture''
-			WHEN ''depr'' THEN ''Deprecated''
-		END AS feature_type,
-		o.is_toplevel,
-		o.ade_id,
-		o.namespace_id
-	FROM ',cdb_schema,'.objectclass AS o
-		INNER JOIN ',cdb_schema,'.namespace AS n ON o.namespace_id = n.id
-	WHERE is_abstract = 0
-		AND n.alias NOT IN (''dyn'', ''app'', ''grp'', ''vers'')
-	ORDER BY o.id
-);
-COMMENT ON TABLE qgis_pkg.classname_lookup IS ''List of classname information for layer name creation'';
-
-CREATE INDEX ocl_oc_id_idx 				ON qgis_pkg.classname_lookup (oc_id);
-CREATE INDEX ocl_classname_idx     		ON qgis_pkg.classname_lookup (oc_name);
-CREATE INDEX ocl_oc_alias_idx      		ON qgis_pkg.classname_lookup (oc_alias);
-CREATE INDEX ocl_feature_type_idx      	ON qgis_pkg.classname_lookup (feature_type);
-CREATE INDEX ocl_is_top_level_idx   	ON qgis_pkg.classname_lookup (is_toplevel);
-CREATE INDEX ocl_ade_id_idx   			ON qgis_pkg.classname_lookup (ade_id);
-CREATE INDEX ocl_namesapce_idx 			ON qgis_pkg.classname_lookup (namespace_id);
-');
-EXECUTE sql_statement;
-
-----------------------------------------------------------------
--- TABLE QGIS_PKG.ATTRIBUTE_DATATYPE_LOOKUP
-----------------------------------------------------------------
-sql_statement := concat('
-DROP TABLE IF EXISTS qgis_pkg.attribute_datatype_lookup CASCADE;
-CREATE TABLE qgis_pkg.attribute_datatype_lookup AS(
-	SELECT 
-		d.id,
-		d.typename,
-		d.namespace_id,
-		n.alias,
-		d.schema,
-		CASE d.typename
-			WHEN ''CityObjectRelation'' 	THEN 1
-			WHEN ''Occupancy'' 				THEN 1
-			WHEN ''SensorConnection'' 		THEN 1
-			WHEN ''TimeseriesComponent''	THEN 1
-			WHEN ''TimeValuePair''			THEN 1
-			WHEN ''GenericAttributeSet''	THEN 1
-			WHEN ''ConstructionEvent''		THEN 1
-			WHEN ''Height''					THEN 1
-			WHEN ''RoomHeight''				THEN 1
-			WHEN ''Role''					THEN 1
-			WHEN ''Transaction''			THEN 1
-		ELSE 0
-		END AS is_nested, -- 1: nested attribute, 0: inline attribute
-		CASE d.typename
-			WHEN ''Boolean''  				THEN 1
-			WHEN ''Integer''  				THEN 1
-			WHEN ''Double''  				THEN 1
-			WHEN ''String''  				THEN 1
-			WHEN ''URI''  					THEN 1
-			WHEN ''Timestamp''  			THEN 1
-			WHEN ''AddressProperty'' 		THEN 2
-			WHEN ''AppearanceProperty''  	THEN 1
-			WHEN ''FeatureProperty'' 		THEN 2
-			WHEN ''Reference'' 				THEN 1
-			WHEN ''Code'' 					THEN 2
-			WHEN ''ExternalReference'' 		THEN 3
-			WHEN ''Measure'' 				THEN 2
-			WHEN ''MeasureOrNilReasonList'' THEN 2
-			WHEN ''QualifiedArea'' 			THEN 3
-			WHEN ''QualifiedVolume'' 		THEN 3
-			WHEN ''StringOrRef'' 			THEN 2
-			WHEN ''Elevation'' 				THEN 3
-		END AS val_col_num, -- the number of columns in which the attribute values are stored
-		CASE d.typename
-			WHEN ''Boolean''  				THEN ARRAY[''val_int'']
-			WHEN ''Integer''  				THEN ARRAY[''val_int'']
-			WHEN ''Double''  				THEN ARRAY[''val_double'']
-			WHEN ''String''  				THEN ARRAY[''val_string'']
-			WHEN ''URI''  					THEN ARRAY[''val_uri'']
-			WHEN ''Timestamp''  			THEN ARRAY[''val_timestamp'']
-			WHEN ''AddressProperty'' 		THEN ARRAY[''val_address_id'',''val_relation_type'']
-			WHEN ''AppearanceProperty''  	THEN ARRAY[''val_appearance_id'']
-			WHEN ''FeatureProperty'' 		THEN ARRAY[''val_feature_id'',''val_relation_type'']
-			WHEN ''Reference'' 				THEN ARRAY[''val_uri'']
-			WHEN ''Code'' 					THEN ARRAY[''val_string'',''val_codespace'']
-			WHEN ''ExternalReference'' 		THEN ARRAY[''val_uri'',''val_codespace'',''val_string'']
-			WHEN ''Measure'' 				THEN ARRAY[''val_double'',''val_uom'']
-			WHEN ''MeasureOrNilReasonList'' THEN ARRAY[''val_array'',''val_uom'']
-			WHEN ''QualifiedArea'' 			THEN ARRAY[''val_double'',''val_string'',''val_codespace'']
-			WHEN ''QualifiedVolume'' 		THEN ARRAY[''val_double'',''val_string'',''val_codespace'']
-			WHEN ''StringOrRef'' 			THEN ARRAY[''val_string'',''val_uri'']
-			WHEN ''Elevation'' 				THEN ARRAY[''val_array'',''val_string'',''val_codespace'']
-		END AS val_col
-	FROM ',cdb_schema,'.datatype AS d
-		INNER JOIN ',cdb_schema,'.namespace AS n ON d.namespace_id = n.id
-	ORDER BY d.id
-);
-COMMENT ON TABLE qgis_pkg.attribute_datatype_lookup IS ''List of attribute values storage column name'';
-
-CREATE INDEX adl_id_idx             ON qgis_pkg.attribute_datatype_lookup (id);
-CREATE INDEX adl_dtname_idx         ON qgis_pkg.attribute_datatype_lookup (typename);
-CREATE INDEX adl_namespace_id_idx   ON qgis_pkg.attribute_datatype_lookup (namespace_id);
-CREATE INDEX adl_nalias_idx      	ON qgis_pkg.attribute_datatype_lookup (alias);
-CREATE INDEX adl_val_col_num_idx    ON qgis_pkg.attribute_datatype_lookup (val_col_num);
-CREATE INDEX adl_val_col_1_idx     	ON qgis_pkg.attribute_datatype_lookup (val_col);
-ALTER TABLE qgis_pkg.attribute_datatype_lookup
-ADD CONSTRAINT is_nested_check CHECK (is_nested IN (0, 1));
-');
-EXECUTE sql_statement;
+	----------------------------------------------------------------
+	-- TABLE QGIS_PKG.CLASSNAME_LOOKUP
+	----------------------------------------------------------------
+	/*  Create metadata table of classname aliases for the feature that is not abstract */
+	sql_statement := concat('
+	DROP TABLE IF EXISTS qgis_pkg.classname_lookup CASCADE;
+	CREATE TABLE         qgis_pkg.classname_lookup AS
+	(
+		SELECT 
+			o.id 				AS oc_id, 
+			o.classname			AS oc_name,
+			CASE o.classname
+				WHEN ''Address''                       THEN ''address''
+				WHEN ''ClosureSurface''                THEN ''closure_surf''
+				WHEN ''CityModel''                     THEN ''ct_model''
+				WHEN ''ImplicitGeometry''              THEN ''implicit_geom''
+				WHEN ''GenericLogicalSpace''           THEN ''gen_log_space''
+				WHEN ''GenericOccupiedSpace''          THEN ''gen_occ_space''
+				WHEN ''GenericUnoccupiedSpace''        THEN ''gen_unocc_space''
+				WHEN ''GenericThematicSurface''        THEN ''gen_them_surf''
+				WHEN ''LandUse''                       THEN ''luse''
+				WHEN ''PointCloud''                    THEN ''pcl''
+				WHEN ''ReliefFeature''                 THEN ''rel_feat''
+				WHEN ''TINRelief''                     THEN ''rel_tin''
+				WHEN ''MassPointRelief''               THEN ''rel_masspoint''
+				WHEN ''BreaklineRelief''               THEN ''rel_breakline''
+				WHEN ''RasterRelief''                  THEN ''rel_raster''
+				WHEN ''Railway''                       THEN ''trn_railway''
+				WHEN ''Section''                       THEN ''trn_section''
+				WHEN ''Waterway''                      THEN ''trn_waterway''
+				WHEN ''Intersection''                  THEN ''trn_intersec''
+				WHEN ''Square''                        THEN ''trn_square''
+				WHEN ''Track''                         THEN ''trn_track''
+				WHEN ''Road''                          THEN ''trn_road''
+				WHEN ''AuxiliaryTrafficSpace''         THEN ''trn_aux_traffic_space''
+				WHEN ''ClearanceSpace''                THEN ''trn_clearance_space''
+				WHEN ''TrafficSpace''                  THEN ''trn_traffic_space''
+				WHEN ''Hole''                          THEN ''trn_hole''
+				WHEN ''AuxiliaryTrafficArea''          THEN ''trn_aux_traffic_area''
+				WHEN ''TrafficArea''                   THEN ''trn_traf_area''
+				WHEN ''Marking''                       THEN ''trn_marking''
+				WHEN ''HoleSurface''                   THEN ''trn_hole_surf''
+				WHEN ''OtherConstruction''             THEN ''con_other''
+				WHEN ''Door''                          THEN ''door''
+				WHEN ''Window''                        THEN ''window''
+				WHEN ''WallSurface''                   THEN ''wallsurf''
+				WHEN ''GroundSurface''                 THEN ''groundsurf''
+				WHEN ''InteriorWallSurface''           THEN ''interior_wallsurf''
+				WHEN ''RoofSurface''                   THEN ''roofsurf''
+				WHEN ''FloorSurface''                  THEN ''floorsurf''
+				WHEN ''OuterFloorSurface''             THEN ''outer_floorsurf''
+				WHEN ''CeilingSurface''                THEN ''ceilingsurf''
+				WHEN ''OuterCeilingSurface''           THEN ''outer_ceilingsurf''
+				WHEN ''DoorSurface''                   THEN ''doorsurf''
+				WHEN ''WindowSurface''                 THEN ''windowsurf''
+				WHEN ''Tunnel''                        THEN ''tun''
+				WHEN ''TunnelPart''                    THEN ''tun_part''
+				WHEN ''TunnelConstructiveElement''     THEN ''tun_constr_elem''
+				WHEN ''HollowSpace''                   THEN ''tun_hollow_space''
+				WHEN ''TunnelInstallation''            THEN ''tun_inst''
+				WHEN ''TunnelFurniture''               THEN ''tun_frn''
+				WHEN ''Building''                      THEN ''bdg''
+				WHEN ''BuildingPart''                  THEN ''bdg_part''
+				WHEN ''BuildingConstructiveElement''   THEN ''bdg_constr_elem''
+				WHEN ''BuildingRoom''                  THEN ''bdg_room''
+				WHEN ''BuildingInstallation''          THEN ''bdg_inst''
+				WHEN ''BuildingFurniture''             THEN ''bdg_frn''
+				WHEN ''BuildingUnit''                  THEN ''bdg_unit''
+				WHEN ''Storey''                        THEN ''bdg_storey''
+				WHEN ''Bridge''                        THEN ''bri''
+				WHEN ''BridgePart''                    THEN ''bri_part''
+				WHEN ''BridgeConstructiveElement''     THEN ''bri_constr_elem''
+				WHEN ''BridgeRoom''                    THEN ''bri_room''
+				WHEN ''BridgeInstallation''            THEN ''bri_inst''
+				WHEN ''BridgeFurniture''               THEN ''bri_frn''
+				WHEN ''CityObjectGroup''               THEN ''cityobj_grp''
+				WHEN ''SolitaryVegetationObject''      THEN ''sol_veg_obj''
+				WHEN ''PlantCover''                    THEN ''plant_cover''
+				WHEN ''WaterBody''                     THEN ''wtr_body''
+				WHEN ''WaterSurface''                  THEN ''wtr_surf''
+				WHEN ''WaterGroundSurface''            THEN ''wtr_groundsurf''
+				WHEN ''CityFurniture''                 THEN ''city_frn''
+			END AS oc_alias,
+			CASE n.alias 
+				WHEN ''core'' THEN ''Core''
+				WHEN ''dyn''  THEN ''Dynamizer''
+				WHEN ''gen''  THEN ''Generics''
+				WHEN ''luse'' THEN ''Landuse''
+				WHEN ''pcl''  THEN ''Pointcloud''
+				WHEN ''dem''  THEN ''Relief''
+				WHEN ''tran'' THEN ''Transportation''
+				WHEN ''con''  THEN ''Construction''
+				WHEN ''tun'' 	THEN ''Tunnel''
+				WHEN ''bldg'' THEN ''Building''
+				WHEN ''brid'' THEN ''Bridge''
+				WHEN ''app''  THEN ''Appearance''
+				WHEN ''grp''  THEN ''Cityobjectgroup''
+				WHEN ''veg''  THEN ''Vegetation''
+				WHEN ''vers'' THEN ''Versions''
+				WHEN ''wtr''  THEN ''Waterbody''
+				WHEN ''frn''  THEN ''Cityfurniture''
+				WHEN ''depr'' THEN ''Deprecated''
+			END AS feature_type,
+			o.is_toplevel,
+			o.ade_id,
+			o.namespace_id
+		FROM ',cdb_schema,'.objectclass AS o
+			INNER JOIN ',cdb_schema,'.namespace AS n ON o.namespace_id = n.id
+		WHERE is_abstract = 0
+			AND n.alias NOT IN (''dyn'', ''app'', ''grp'', ''vers'')
+		ORDER BY o.id
+	);
+	COMMENT ON TABLE qgis_pkg.classname_lookup IS ''List of classname information for layer name creation'';
+	
+	CREATE INDEX ocl_oc_id_idx 				ON qgis_pkg.classname_lookup (oc_id);
+	CREATE INDEX ocl_classname_idx     		ON qgis_pkg.classname_lookup (oc_name);
+	CREATE INDEX ocl_oc_alias_idx      		ON qgis_pkg.classname_lookup (oc_alias);
+	CREATE INDEX ocl_feature_type_idx      	ON qgis_pkg.classname_lookup (feature_type);
+	CREATE INDEX ocl_is_top_level_idx   	ON qgis_pkg.classname_lookup (is_toplevel);
+	CREATE INDEX ocl_ade_id_idx   			ON qgis_pkg.classname_lookup (ade_id);
+	CREATE INDEX ocl_namesapce_idx 			ON qgis_pkg.classname_lookup (namespace_id);
+	');
+	EXECUTE sql_statement;
+	
+	----------------------------------------------------------------
+	-- TABLE QGIS_PKG.ATTRIBUTE_DATATYPE_LOOKUP
+	----------------------------------------------------------------
+	sql_statement := concat('
+	DROP TABLE IF EXISTS qgis_pkg.attribute_datatype_lookup CASCADE;
+	CREATE TABLE qgis_pkg.attribute_datatype_lookup AS(
+		SELECT 
+			d.id,
+			d.typename,
+			d.namespace_id,
+			n.alias,
+			d.schema,
+			CASE d.typename
+				WHEN ''CityObjectRelation'' 	THEN 1
+				WHEN ''Occupancy'' 				THEN 1
+				WHEN ''SensorConnection'' 		THEN 1
+				WHEN ''TimeseriesComponent''	THEN 1
+				WHEN ''TimeValuePair''			THEN 1
+				WHEN ''GenericAttributeSet''	THEN 1
+				WHEN ''ConstructionEvent''		THEN 1
+				WHEN ''Height''					THEN 1
+				WHEN ''RoomHeight''				THEN 1
+				WHEN ''Role''					THEN 1
+				WHEN ''Transaction''			THEN 1
+			ELSE 0
+			END AS is_nested, -- 1: nested attribute, 0: inline attribute
+			CASE d.typename
+				WHEN ''Boolean''  				THEN 1
+				WHEN ''Integer''  				THEN 1
+				WHEN ''Double''  				THEN 1
+				WHEN ''String''  				THEN 1
+				WHEN ''URI''  					THEN 1
+				WHEN ''Timestamp''  			THEN 1
+				WHEN ''AddressProperty'' 		THEN 2
+				WHEN ''AppearanceProperty''  	THEN 1
+				WHEN ''FeatureProperty'' 		THEN 2
+				WHEN ''Reference'' 				THEN 1
+				WHEN ''Code'' 					THEN 2
+				WHEN ''ExternalReference'' 		THEN 3
+				WHEN ''Measure'' 				THEN 2
+				WHEN ''MeasureOrNilReasonList'' THEN 2
+				WHEN ''QualifiedArea'' 			THEN 3
+				WHEN ''QualifiedVolume'' 		THEN 3
+				WHEN ''StringOrRef'' 			THEN 2
+				WHEN ''Elevation'' 				THEN 3
+			END AS val_col_num, -- the number of columns in which the attribute values are stored
+			CASE d.typename
+				WHEN ''Boolean''  				THEN ARRAY[''val_int'']
+				WHEN ''Integer''  				THEN ARRAY[''val_int'']
+				WHEN ''Double''  				THEN ARRAY[''val_double'']
+				WHEN ''String''  				THEN ARRAY[''val_string'']
+				WHEN ''URI''  					THEN ARRAY[''val_uri'']
+				WHEN ''Timestamp''  			THEN ARRAY[''val_timestamp'']
+				WHEN ''AddressProperty'' 		THEN ARRAY[''val_address_id'',''val_relation_type'']
+				WHEN ''AppearanceProperty''  	THEN ARRAY[''val_appearance_id'']
+				WHEN ''FeatureProperty'' 		THEN ARRAY[''val_feature_id'',''val_relation_type'']
+				WHEN ''Reference'' 				THEN ARRAY[''val_uri'']
+				WHEN ''Code'' 					THEN ARRAY[''val_string'',''val_codespace'']
+				WHEN ''ExternalReference'' 		THEN ARRAY[''val_uri'',''val_codespace'',''val_string'']
+				WHEN ''Measure'' 				THEN ARRAY[''val_double'',''val_uom'']
+				WHEN ''MeasureOrNilReasonList'' THEN ARRAY[''val_array'',''val_uom'']
+				WHEN ''QualifiedArea'' 			THEN ARRAY[''val_double'',''val_string'',''val_codespace'']
+				WHEN ''QualifiedVolume'' 		THEN ARRAY[''val_double'',''val_string'',''val_codespace'']
+				WHEN ''StringOrRef'' 			THEN ARRAY[''val_string'',''val_uri'']
+				WHEN ''Elevation'' 				THEN ARRAY[''val_array'',''val_string'',''val_codespace'']
+			END AS val_col
+		FROM ',cdb_schema,'.datatype AS d
+			INNER JOIN ',cdb_schema,'.namespace AS n ON d.namespace_id = n.id
+		ORDER BY d.id
+	);
+	COMMENT ON TABLE qgis_pkg.attribute_datatype_lookup IS ''List of attribute values storage column name'';
+	
+	CREATE INDEX adl_id_idx             ON qgis_pkg.attribute_datatype_lookup (id);
+	CREATE INDEX adl_dtname_idx         ON qgis_pkg.attribute_datatype_lookup (typename);
+	CREATE INDEX adl_namespace_id_idx   ON qgis_pkg.attribute_datatype_lookup (namespace_id);
+	CREATE INDEX adl_nalias_idx      	ON qgis_pkg.attribute_datatype_lookup (alias);
+	CREATE INDEX adl_val_col_num_idx    ON qgis_pkg.attribute_datatype_lookup (val_col_num);
+	CREATE INDEX adl_val_col_1_idx     	ON qgis_pkg.attribute_datatype_lookup (val_col);
+	ALTER TABLE qgis_pkg.attribute_datatype_lookup
+	ADD CONSTRAINT is_nested_check CHECK (is_nested IN (0, 1));
+	');
+	EXECUTE sql_statement;
 END $MAINBODY$;
 
 
