@@ -343,7 +343,6 @@ SELECT DISTINCT ON (cdb_schema, parent_objectclass_id, parent_classname, objectc
 	p.datatype_id					::integer 			AS datatype_id,
 	p.name							::text				AS geometry_name,
 	p.val_lod						::text 				AS lod,
-	CASE 
 	CASE
 		-- relief component geometry
 		WHEN p.name = ''tin'' 																				THEN ''tin''
