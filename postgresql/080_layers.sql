@@ -1051,16 +1051,16 @@ class_alias := qgis_pkg.objectclass_id_to_alias(oc_id);
 g_type 		:= (SELECT CASE
 		            WHEN r.geometry_type = 'tin' 						THEN 'tin'
 		            WHEN r.geometry_type = 'reliefPoints' 				THEN 'reliefPt'
-		            WHEN r.geometry_type = 'ridgeOrValleyLines' 		THEN 'rOVL'
+		            WHEN r.geometry_type = 'ridgeOrValleyLines' 		THEN 'ridgeOrValleyL'
 		            WHEN r.geometry_type = 'breaklines' 				THEN 'breakL'
-		            WHEN r.geometry_type = 'Solid' 					THEN 'Solid'
+		            WHEN r.geometry_type = 'Solid' 						THEN 'Solid'
 		            WHEN r.geometry_type = 'MultiSurface' 				THEN 'MSurf'
 		            WHEN r.geometry_type = 'MultiCurve' 				THEN 'MCurve'
-		            WHEN r.geometry_type = 'TerrainIntersectionCurve' 	THEN 'TerrainIC'
-		            WHEN r.geometry_type = 'Point' 					THEN 'Pt'
-		            WHEN r.geometry_type = 'ImplicitRepresentation' 	THEN 'ImplicitR'
+		            WHEN r.geometry_type = 'TerrainIntersectionCurve' 	THEN 'TerrainInterCurve'
+		            WHEN r.geometry_type = 'Point' 						THEN 'Pt'
+		            WHEN r.geometry_type = 'ImplicitRepresentation' 	THEN 'Implicit'
 					WHEN r.geometry_type = 'Envelope'					Then 'Envelope'
-					WHEN r.geometry_type = 'MultiPoint'				THEN 'address'
+					WHEN r.geometry_type = 'MultiPoint'					THEN 'address'
 		            ELSE 'Unknown' -- handle unexpected cases
         		END);
 

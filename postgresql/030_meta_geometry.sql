@@ -101,7 +101,8 @@ IF oc_ids IS NOT NULL THEN
 				p1.datatype_id																				::integer 			AS datatype_id,
 				p1.name																						::text				AS geometry_name,
 				0																							::text				AS lod,
-				''MultiPoint''																				::text 				AS geometry_type,
+				-- MultiPoint
+				''MPt''																						::text 		       	AS geometry_type,
 				''MultiPointZ''																				::text     			AS postgis_geom_type,
 				clock_timestamp()																			::timestamptz(3)  	AS last_modification_date
 			FROM ',qi_cdb_schema,'.feature AS f
@@ -128,7 +129,8 @@ IF oc_ids IS NOT NULL THEN
 				p.datatype_id																		::integer		    AS datatype_id,
 				p.name																				::text				AS geometry_name,
 				0 																					::text		        AS lod,
-				''MultiPoint''																		::text 		       	AS geometry_type,
+				-- MultiPoint
+				''MPt''																				::text 		       	AS geometry_type, 
 				''MultiPointZ''																		::text              AS postgis_geom_type,
 				clock_timestamp()																	::timestamptz(3)  	AS last_modification_date
 			FROM ',qi_cdb_schema,'.feature AS f 
@@ -342,26 +344,38 @@ SELECT DISTINCT ON (cdb_schema, parent_objectclass_id, parent_classname, objectc
 	p.name							::text				AS geometry_name,
 	p.val_lod						::text 				AS lod,
 	CASE 
-        WHEN p.name LIKE ''lod%'' THEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5))
-        ELSE p.name
+	CASE
+		-- relief component geometry
+		WHEN p.name = ''tin'' 																				THEN ''tin''
+		WHEN p.name = ''reliefPoints'' 																		THEN ''reliefPt''
+		WHEN p.name = ''ridgeOrValleyLines''																THEN ''ridgeOrValleyL'' 
+		WHEN p.name = ''breaklines'' 																		THEN ''breakL''
+ 		--WHEN p.name = ''gird'' 				THEN ''grid'' -- to be checked
+ 		--WHEN p.name = ''pointCloud'' 			THEN ''pointCloud'' -- to be checked, not yet supported by current 3DCityDB
+		-- core geometry & lod concepts
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''Solid'' 							THEN ''Solid''
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''MultiSurface'' 					THEN ''MSurf''
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''MultiCurve'' 					THEN ''MCurve''
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''TerrainIntersectionCurve'' 		THEN ''TerrainInterCurve''
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''Point'' 							THEN ''Pt''
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''ImplicitRepresentation'' 		THEN ''Implicit''
     END								::text 				AS geometry_type,
 							 
 	CASE
 		-- relief component geometry
-		WHEN p.name = ''tin'' 					THEN ''MultiPolygonZ''
-		WHEN p.name = ''reliefPoints'' 		THEN ''MultiPointZ''
-		WHEN p.name = ''ridgeOrValleyLines''	THEN ''MultiLineStringZ'' 
-		WHEN p.name = ''breaklines'' 			THEN ''MultiLineStringZ''
+		WHEN p.name = ''tin'' 																				THEN ''MultiPolygonZ''
+		WHEN p.name = ''reliefPoints'' 																		THEN ''MultiPointZ''
+		WHEN p.name = ''ridgeOrValleyLines''																THEN ''MultiLineStringZ'' 
+		WHEN p.name = ''breaklines'' 																		THEN ''MultiLineStringZ''
  		--WHEN p.name = ''gird'' 				THEN '''' -- to be checked
- 		--WHEN p.name = ''pointCloud'' 		THEN ''MultiPointZ'' -- to be checked, not yet supported by current 3DCityDB
+ 		--WHEN p.name = ''pointCloud'' 			THEN ''MultiPointZ'' -- to be checked, not yet supported by current 3DCityDB
 		-- core geometry & lod concepts
-		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''Solid'' 						THEN ''PolyhedralSurfaceZ''
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''Solid'' 							THEN ''PolyhedralSurfaceZ''
 		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''MultiSurface'' 					THEN ''MultiPolygonZ''
 		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''MultiCurve'' 					THEN ''MultiLineStringZ''
-		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''TerrainIntersectionCurve'' 	THEN ''MultiLineStringZ''
-		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''Point'' 						THEN ''PointZ''
-		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''ImplicitRepresentation'' 		THEN ''MultiPolygonZ''
-							 
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''TerrainIntersectionCurve'' 		THEN ''MultiLineStringZ''
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''Point'' 							THEN ''PointZ''
+		WHEN (SUBSTRING(p.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''ImplicitRepresentation'' 		THEN ''MultiPolygonZ''					 
 	END								::text 				AS postgis_geom_type,
 	clock_timestamp()				::timestamptz(3) 	AS last_modification_date
 FROM 
@@ -464,12 +478,13 @@ SELECT DISTINCT ON (cdb_schema, parent_objectclass_id, objectclass_id, datatype_
 	p1.name									::text 				AS geometry_name,
 	p1.val_lod								::text				AS lod,
 	CASE 
-        WHEN p1.name LIKE ''lod%'' THEN (SUBSTRING(p1.name FROM POSITION(''lod%'' IN p1.name) + 5))
-        ELSE p1.name
+ 		-- WHEN p1.name = ''pointCloud'' 		THEN ''pointCloud'' -- to be checked, not yet supported by current 3DCityDB
+		WHEN (SUBSTRING(p1.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''MultiSurface''			THEN ''MSurf''
+		WHEN (SUBSTRING(p1.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''MultiCurve'' 			THEN ''MCurve'' 
     END																							::text 				AS geometry_type,
 	CASE
 		-- core geometry & lod concepts
--- 		WHEN p1.name = ''pointCloud'' 		THEN ''MULTIPOINTZ'' -- to be checked, not yet supported by current 3DCityDB
+ 		-- WHEN p1.name = ''pointCloud'' 		THEN ''MULTIPOINTZ'' -- to be checked, not yet supported by current 3DCityDB
 		WHEN (SUBSTRING(p1.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''MultiSurface''			THEN ''MultiPolygonZ''
 		WHEN (SUBSTRING(p1.name FROM POSITION(''lod%'' IN p.name) + 5)) = ''MultiCurve'' 			THEN ''MultiLineStringZ'' 
 	END 																						::text				AS postgis_geom_type,
