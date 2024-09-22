@@ -27,18 +27,13 @@ DECLARE
     attri_datatype_id integer;
     attri_label varchar DEFAULT 'Inline';
     is_nested varchar DEFAULT 'FALSE';
-    -- is_multiple varchar DEFAULT 'FALSE';
-    -- max_multiplicity integer DEFAULT NULL;
-    -- is_multiple_value_columns varchar DEFAULT NULL;
-    -- n_value_columns integer DEFAULT NULL;
-    -- value_column text[] DEFAULT NULL;
     sql_insert_header text;
     sql_insert_value text;
     sql_inline_attri text;
 BEGIN
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 -- Get objectclass name
@@ -74,7 +69,7 @@ sql_insert_value := concat('
 ');
 
 sql_inline_attri := concat('
-    INSERT INTO qgis_pkg.feature_attribute_metadata (',sql_insert_header,') 
+    INSERT INTO ',qi_usr_schema,'.feature_attribute_metadata (',sql_insert_header,') 
     VALUES (',sql_insert_value,') 
     ON CONFLICT (cdb_schema, objectclass_id, classname, parent_attribute_name, attribute_name) 
     DO UPDATE SET last_modification_date = clock_timestamp();
@@ -128,8 +123,8 @@ DECLARE
     sql_nested_attri text;
 BEGIN
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 -- Get objectclass name
@@ -171,7 +166,7 @@ sql_insert_value := concat('
 ');
 
 sql_nested_attri := concat('
-    INSERT INTO qgis_pkg.feature_attribute_metadata (',sql_insert_header,') 
+    INSERT INTO ',qi_usr_schema,'.feature_attribute_metadata (',sql_insert_header,') 
     VALUES (',sql_insert_value,') 
     ON CONFLICT (cdb_schema, objectclass_id, classname, parent_attribute_name, attribute_name) 
     DO UPDATE SET last_modification_date = clock_timestamp();
@@ -203,7 +198,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.update_feature_attribute_metadata(
 	cdb_schema varchar,
     cdb_bbox_type varchar DEFAULT 'db_schema'
 ) 
-RETURNS VOID AS $$
+RETURNS varchar AS $$
 DECLARE
     cdb_bbox_type_array CONSTANT varchar[]	:= ARRAY['db_schema', 'm_view', 'qgis']; cdb_envelope geometry; srid integer;
 	qi_usr_schema varchar 			        := quote_ident(usr_schema);
@@ -232,11 +227,6 @@ END IF;
 -- Check that the cdb_box_type is a valid value
 IF cdb_bbox_type IS NULL OR NOT (cdb_bbox_type = ANY (cdb_bbox_type_array)) THEN
 	RAISE EXCEPTION 'cdb_bbox_type value is invalid. It must be one of (%)', cdb_bbox_type_array;
-END IF;
-
--- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
 END IF;
 
 -- Get the srid from the cdb_schema
@@ -269,7 +259,7 @@ EXECUTE format('SELECT STRING_AGG(adl.id::TEXT, %L) FROM qgis_pkg.attribute_data
 -- SCAN AND INSERT OBJECTCLASS ATTRIBUTES
 ------------------------------------------
 -- Delete all existing records of the specified cdb_schema
-EXECUTE format ('DELETE FROM qgis_pkg.feature_attribute_metadata WHERE cdb_schema = %L', qi_cdb_schema);
+EXECUTE format ('DELETE FROM %I.feature_attribute_metadata WHERE cdb_schema = %L', qi_usr_schema, qi_cdb_schema);
 
 -- Schema-wise scan of exisiting objectclass_ids in the given extent and return as an array
 -- Exclude 'Versioning', 'Dynamizer', 'CityObjectGroup', 'Appearance' modules
@@ -336,6 +326,8 @@ LOOP
         iter_count := 1;
 	END IF;
 END LOOP;
+
+RETURN cdb_schema;
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN

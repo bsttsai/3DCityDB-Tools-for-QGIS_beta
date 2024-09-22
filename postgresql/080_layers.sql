@@ -16,19 +16,22 @@
 ----------------------------------------------------------------
 -- Create FUNCTION QGIS_PKG.GET_ALL_ATTRIBUTE_ID_IN_SCHEMA
 ----------------------------------------------------------------
-DROP FUNCTION IF EXISTS    qgis_pkg.get_all_attribute_id_in_schema(varchar, integer, boolean) CASCADE;
+DROP FUNCTION IF EXISTS    qgis_pkg.get_all_attribute_id_in_schema(varchar, varchar, integer, boolean) CASCADE;
 CREATE OR REPLACE FUNCTION qgis_pkg.get_all_attribute_id_in_schema(
+	usr_schema  varchar,
 	cdb_schema 	varchar,
 	objectclass_id integer,
-	is_nested	boolean DEFAULT FALSE-- TRUE to gather all nested attributes
+	is_nested	boolean DEFAULT FALSE -- TRUE to gather all nested attributes
 )
 RETURNS integer[] 
 AS $$
 DECLARE
+	qi_usr_schema varchar := quote_ident(usr_schema);
 	qi_cdb_schema varchar := quote_ident(cdb_schema);
-	qi_is_nested boolean := is_nested;
-	oc_id integer := objectclass_id;
-	classname varchar := qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id);
+	qi_is_nested boolean  := is_nested;
+	oc_id integer 		  := objectclass_id;
+	classname varchar 	  := qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id);
+	usr_schema_meta_attri varchar := concat(usr_schema,'.feature_attribute_metadata');
 	attri_ids integer[];
 	attri_id integer;
 	attri_type varchar;
@@ -41,18 +44,18 @@ IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata
 END IF;
 
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 IF NOT is_nested THEN
 	attri_type := 'inline';
-	attri_ids := (SELECT ARRAY(SELECT fam.id FROM qgis_pkg.feature_attribute_metadata AS fam WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = oc_id AND fam.is_nested = qi_is_nested));
+	attri_ids := (SELECT ARRAY(SELECT fam.id FROM usr_schema_meta_attri AS fam WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = oc_id AND fam.is_nested = qi_is_nested));
 ELSE
 	attri_type := 'nested';
 	FOR r IN
 		SELECT DISTINCT fam.cdb_schema, fam.objectclass_id, fam.parent_attribute_name 
-		FROM qgis_pkg.feature_attribute_metadata AS fam WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = oc_id AND fam.is_nested = qi_is_nested
+		FROM usr_schema_meta_attri AS fam WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = oc_id AND fam.is_nested = qi_is_nested
 	LOOP
 		attri_id  := (SELECT * FROM qgis_pkg.get_attribute_key_id(r.cdb_schema, r.objectclass_id , r.parent_attribute_name));
 		attri_ids := ARRAY_APPEND(attri_ids, attri_id);
@@ -73,14 +76,11 @@ EXCEPTION
 		RAISE EXCEPTION 'qgis_pkg.get_all_attribute_id_in_schema(): %', SQLERRM;
 END;
 $$ LANGUAGE plpgsql;
-COMMENT ON FUNCTION qgis_pkg.get_all_attribute_id_in_schema(varchar, integer, boolean) IS 'Get all existing attribute key_id(s) in the given schema';
-REVOKE EXECUTE ON FUNCTION qgis_pkg.get_all_attribute_id_in_schema(varchar, integer, boolean) FROM public;
+COMMENT ON FUNCTION qgis_pkg.get_all_attribute_id_in_schema(varchar, varchar, integer, boolean) IS 'Get all existing attribute key_id(s) in the given schema';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.get_all_attribute_id_in_schema(varchar, varchar, integer, boolean) FROM public;
 -- Example
--- SELECT fam.id 
--- FROM qgis_pkg.feature_attribute_metadata AS fam 
--- WHERE fam.cdb_schema = qi_cdb_schema AND fam.is_nested = qi_is_nested
--- SELECT * FROM qgis_pkg.get_all_attribute_id_in_schema('citydb', 901);	-- inline
--- SELECT * FROM qgis_pkg.get_all_attribute_id_in_schema('citydb', 901, TRUE); -- nested
+-- SELECT * FROM qgis_pkg.get_all_attribute_id_in_schema('qgis_bstsai','citydb', 901);	-- inline
+-- SELECT * FROM qgis_pkg.get_all_attribute_id_in_schema('qgis_bstsai','citydb', 901, TRUE); -- nested
 
 
 ----------------------------------------------------------------
@@ -107,35 +107,35 @@ IF qi_usr_schema IS NULL OR NOT EXISTS(SELECT * FROM information_schema.schemata
 END IF;
 
 -- Check if feature geometry metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_geometry_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_geometry_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+	RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 IF NOT is_matview THEN
 -- View name
 	IF NOT is_attri THEN
 	-- get geometry view name
-		sql_get_view := concat('SELECT fgm.view_name FROM qgis_pkg.feature_geometry_metadata AS fgm WHERE fgm.id = ',key_id,';');
+		sql_get_view := concat('SELECT fgm.view_name FROM ',qi_usr_schema,'.feature_geometry_metadata AS fgm WHERE fgm.id = ',key_id,';');
 		EXECUTE sql_get_view INTO view_name;
 	ELSE
 	-- get attribute view name
-		sql_get_view := concat('SELECT fgm.view_name FROM qgis_pkg.feature_attribute_metadata AS fgm WHERE fgm.id = ',key_id,';');
+		sql_get_view := concat('SELECT fgm.view_name FROM ',qi_usr_schema,'.feature_attribute_metadata AS fgm WHERE fgm.id = ',key_id,';');
 		EXECUTE sql_get_view INTO view_name;
 	END IF;
 ELSE
 -- Materialized view name
 	IF NOT is_attri THEN
 	-- get geometry view name
-		sql_get_view := concat('SELECT fgm.mview_name FROM qgis_pkg.feature_geometry_metadata AS fgm WHERE fgm.id = ',key_id,';');
+		sql_get_view := concat('SELECT fgm.mview_name FROM ',qi_usr_schema,'.feature_geometry_metadata AS fgm WHERE fgm.id = ',key_id,';');
 		EXECUTE sql_get_view INTO view_name;
 	ELSE
 	-- get attribute view name
-		sql_get_view := concat('SELECT fgm.mview_name FROM qgis_pkg.feature_attribute_metadata AS fgm WHERE fgm.id = ',key_id,';');
+		sql_get_view := concat('SELECT fgm.mview_name FROM ',qi_usr_schema,'.feature_attribute_metadata AS fgm WHERE fgm.id = ',key_id,';');
 		EXECUTE sql_get_view INTO view_name;
 	END IF;
 END IF;
@@ -320,9 +320,10 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_layer_multiple_joins(
 RETURNS void
 AS $$
 DECLARE
-	qi_usr_name varchar	  := (SELECT substring(usr_schema from 'qgis_(.*)') AS usr_name);
-	qi_usr_schema varchar := quote_ident(usr_schema);
-	qi_cdb_schema varchar := quote_ident(cdb_schema);
+	qi_usr_name varchar	  		  	:= (SELECT substring(usr_schema from 'qgis_(.*)') AS usr_name);
+	qi_usr_schema varchar 			:= quote_ident(usr_schema);
+	qi_cdb_schema varchar 			:= quote_ident(cdb_schema);
+	usr_schema_meta_attri varchar	:= concat(usr_schema, '.feature_attribute_metadata');
 	attri_val_cols_array varchar[][]; -- store a list of attribute val_cols
 	attri_val_cols varchar[]; -- store all val_col name of attribute view(s)
 	attri_val_col varchar; 
@@ -381,12 +382,12 @@ FROM ');
 
 -- retrieve the geometry view (matview by default)
 geom_view_name := qgis_pkg.get_view_name(qi_usr_schema, geometry_id, FALSE, TRUE);
+EXECUTE format ('
 SELECT 
 	fgm.bbox_type ,fgm.parent_objectclass_id, fgm.objectclass_id, fgm.datatype_id, 
 	fgm.geometry_name, fgm.lod, fgm.geometry_type, fgm.postgis_geom_type
-FROM qgis_pkg.feature_geometry_metadata AS fgm
-INTO r
-WHERE fgm.id = g_id;
+FROM ',qi_usr_schema,'.feature_geometry_metadata AS fgm
+WHERE fgm.id = ',g_id,';') INTO r;
 
 -- check if the geometry views have been created, if not first created both geometry view and matview
 IF geom_view_name IS NULL THEN
@@ -409,14 +410,14 @@ g_type 		:= (SELECT CASE
 		            WHEN r.geometry_type = 'reliefPoints' 				THEN 'reliefPt'
 		            WHEN r.geometry_type = 'ridgeOrValleyLines' 		THEN 'rOVL'
 		            WHEN r.geometry_type = 'breaklines' 				THEN 'breakL'
-		            WHEN r.geometry_type = 'Solid' 					THEN 'Solid'
+		            WHEN r.geometry_type = 'Solid' 						THEN 'Solid'
 		            WHEN r.geometry_type = 'MultiSurface' 				THEN 'MSurf'
 		            WHEN r.geometry_type = 'MultiCurve' 				THEN 'MCurve'
 		            WHEN r.geometry_type = 'TerrainIntersectionCurve' 	THEN 'TerrainIC'
-		            WHEN r.geometry_type = 'Point' 					THEN 'Pt'
+		            WHEN r.geometry_type = 'Point' 						THEN 'Pt'
 		            WHEN r.geometry_type = 'ImplicitRepresentation' 	THEN 'ImplicitR'
 					WHEN r.geometry_type = 'Envelope'					THEN 'Envelope'
-					WHEN r.geometry_type = 'MultiPoint'				THEN 'address'	
+					WHEN r.geometry_type = 'MultiPoint'					THEN 'address'	
 		            ELSE 'Unknown' -- handle unexpected cases
         		END);
 lod 		:= r.lod;
@@ -467,7 +468,7 @@ ELSE
 			SELECT 
 				fam.objectclass_id, fam.parent_attribute_name, fam.attribute_name, fam.is_nested, fam.bbox_type
 			INTO r
-			FROM qgis_pkg.feature_attribute_metadata AS fam
+			FROM usr_schema_meta_attri AS fam
 			WHERE fam.id = attri_id;
 			IF NOT r.is_nested THEN
 				PERFORM qgis_pkg.create_attribute_view(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.attribute_name, r.is_nested, r.bbox_type, is_matview);
@@ -477,7 +478,7 @@ ELSE
 			attri_view_name := qgis_pkg.get_view_name(qi_usr_schema, attri_id, TRUE, is_matview);
 		END IF;
 
-		qi_is_nested := (SELECT is_nested FROM qgis_pkg.feature_attribute_metadata WHERE id = attri_id);
+		qi_is_nested := (SELECT is_nested FROM usr_schema_meta_attri WHERE id = attri_id);
 		IF NOT qi_is_nested THEN
 			inline_prefix := concat(inline_prefix, attri_id, ',');
 			inline_attri_num := inline_attri_num + 1;
@@ -808,7 +809,7 @@ IF attri_ids IS NOT NULL THEN
 	-- only 1 attribute
 	SELECT fam.bbox_type, fam.objectclass_id, fam.parent_attribute_name, fam.attribute_name, fam.is_nested 
 	INTO r
-	FROM qgis_pkg.feature_attribute_metadata AS fam
+	FROM usr_schema_meta_attri AS fam
 	WHERE fam.id = attribute_ids[1];
 	IF NOT r.is_nested THEN
 		SELECT qgis_pkg.collect_inline_attribute(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.attribute_name, r.bbox_type) INTO sql_attri;
@@ -862,7 +863,7 @@ FROM ('
 		WHILE attri_index <= num_attri THEN
 		LOOP
 			SELECT fam.bbox_type, fam.objectclass_id, fam.parent_attribute_name, fam.attribute_name, fam.is_nested INTO r
-			FROM qgis_pkg.feature_attribute_metadata AS fam
+			FROM usr_schema_meta_attri AS fam
 			WHERE fam.id = attribute_ids[attri_index];
 			IF NOT r.is_nested THEN
 				SELECT qgis_pkg.collect_inline_attribute(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.attribute_name, r.bbox_type) INTO sql_attri;
@@ -875,7 +876,7 @@ FROM ('
 			LOOP
 				attri_index := attri_index + 1;
 				SELECT fam.bbox_type, fam.objectclass_id, fam.parent_attribute_name, fam.attribute_name, fam.is_nested INTO r
-				FROM qgis_pkg.feature_attribute_metadata AS fam
+				FROM usr_schema_meta_attri AS fam
 				WHERE fam.id = attribute_ids[attri_index];
 				IF NOT r.is_nested THEN
 					SELECT qgis_pkg.collect_inline_attribute(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.attribute_name, r.bbox_type) INTO sql_attri;
@@ -1033,12 +1034,13 @@ FROM ');
 
 -- retrieve the geometry view (matview by default)
 geom_view_name := qgis_pkg.get_view_name(qi_usr_schema, geometry_id, FALSE, TRUE);
+EXECUTE format('
 SELECT 
 	fgm.bbox_type ,fgm.parent_objectclass_id, fgm.objectclass_id, fgm.datatype_id, 
 	fgm.geometry_name, fgm.lod, fgm.geometry_type, fgm.postgis_geom_type
-FROM qgis_pkg.feature_geometry_metadata AS fgm
-INTO r
-WHERE fgm.id = g_id;
+FROM ',qi_usr_schema,'.feature_geometry_metadata AS fgm
+WHERE fgm.id = ',g_id,';') INTO r;
+
 p_oc_id 	:= r.parent_objectclass_id;
 oc_id 		:= r.objectclass_id;
 IF p_oc_id <> 0 THEN
@@ -1263,29 +1265,31 @@ AS $$
 DECLARE
 	qi_usr_schema varchar := quote_ident(usr_schema);
 	qi_cdb_schema varchar := quote_ident(cdb_schema);
+	usr_schema_meta_geom varchar  := concat(usr_schema,'.feature_geometry_metadata');
+	usr_schema_meta_attri varchar := concat(usr_schema,'.feature_attribute_metadata');
 	r1 RECORD;
 	attr_count integer;
 	
 BEGIN
 	-- Check if feature geometry metadata table exists
-	IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_geometry_metadata') THEN
-		RAISE EXCEPTION 'qgis_pkg.feature_geometry_metadata table not yet created. Please create it first';
+	IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+		RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
 	END IF;
 
 	-- Check if feature attribute metadata table exists
-	IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-		RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+	IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+		RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 	END IF;
 
 	-- Loop through all available feature geometries
 	FOR r1 IN
 		SELECT parent_objectclass_id AS p_oc_id, objectclass_id AS oc_id, geometry_name AS geom, lod AS lod
-		FROM qgis_pkg.feature_geometry_metadata AS fgm 
+		FROM usr_schema_meta_geom AS fgm 
 		WHERE fgm.cdb_schema = qi_cdb_schema AND geometry_name <> 'address' AND postgis_geom_type IS NOT NULL
 	LOOP
 		-- Count attributes for the current object class
 		SELECT COUNT(*) INTO attr_count
-		FROM qgis_pkg.feature_attribute_metadata AS fam 
+		FROM usr_schema_meta_attri AS fam 
 		WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = r1.oc_id;
 
 		-- If there are attributes, use approach 3 with all attributes

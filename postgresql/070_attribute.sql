@@ -414,13 +414,19 @@ IF attri_val_cols IS NOT NULL THEN
 	FROM ',qi_cdb_schema,'.feature AS f
 		INNER JOIN ',qi_cdb_schema,'.property AS p ON (f.id = p.feature_id AND f.objectclass_id = ',objectclass_id,' AND p.name = ',quote_literal(attribute_name),'',sql_where,')');
 	-- Update the is_multiple_value_columns, n_value_columns, value_columns
-	UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+	EXECUTE format('
+	UPDATE %I.feature_attribute_metadata AS fam
 	SET 
-		is_multiple_value_columns = qi_is_multiple_val_cols, 
-		n_value_columns = qi_n_val_cols,
-		value_column = attri_val_cols, 
+		is_multiple_value_columns = %L, 
+		n_value_columns = %L,
+		value_column = %L, 
 		last_modification_date = clock_timestamp()
-	WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.attribute_name = qi_attri_name;
+	WHERE fam.cdb_schema = %L
+		AND fam.objectclass_id = %L
+		AND fam.attribute_name = %L;
+	', 
+	qi_usr_schema, qi_is_multiple_val_cols, qi_n_val_cols, attri_val_cols,
+	qi_cdb_schema, qi_oc_id, qi_attri_name);
 ELSE
 	sql_attri := NULL;
 END IF;
@@ -599,14 +605,20 @@ FROM CROSSTAB(
 END IF;
 
 -- Update the is_multiple_value_columns, n_value_columns, value_columns and ct_type_name if there are multiple val_cols
-UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+EXECUTE format('
+UPDATE %I.feature_attribute_metadata AS fam
 SET 
-	is_multiple_value_columns = qi_is_multiple_val_cols, 
-	ct_type_name = qi_ct_type_name,
-	n_value_columns = qi_n_val_cols,
-	value_column = attri_val_cols, 
+	is_multiple_value_columns = %L, 
+	ct_type_name = %L,
+	n_value_columns = %L,
+	value_column = %L, 
 	last_modification_date = clock_timestamp()
-WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.attribute_name = qi_attri_name;
+WHERE fam.cdb_schema = %L 
+	AND fam.objectclass_id = %L 
+	AND fam.attribute_name = %L;
+', 
+qi_usr_schema, qi_is_multiple_val_cols, qi_ct_type_name, qi_n_val_cols, 
+attri_val_cols, qi_cdb_schema, qi_oc_id, qi_attri_name);
 
 RETURN sql_attri;
 	
@@ -672,9 +684,18 @@ ELSE
 END IF;
 
 -- Update the is_multiple and maximum multiplicity column
-UPDATE qgis_pkg.feature_attribute_metadata AS fgm
-SET is_multiple = qi_is_multiple, max_multiplicity = qi_max_multiplicity, last_modification_date = clock_timestamp()
-WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.attribute_name = qi_attri_name;
+EXECUTE format('
+UPDATE %I.feature_attribute_metadata AS fam
+SET 
+	is_multiple = %L, 
+	max_multiplicity = %L, 
+	last_modification_date = clock_timestamp()
+WHERE fam.cdb_schema = %L 
+	AND fam.objectclass_id = %L 
+	AND fam.attribute_name = %L;
+', 
+qi_usr_schema, qi_is_multiple, qi_max_multiplicity, 
+qi_cdb_schema, qi_oc_id, qi_attri_name);
 
 RETURN sql_attri;
 
@@ -744,12 +765,12 @@ ELSE
 END IF;
 
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 -- Get the child attributes from feature attribute metadata table
-EXECUTE format('SELECT ARRAY_AGG(attribute_name) FROM qgis_pkg.feature_attribute_metadata WHERE cdb_schema = %L AND objectclass_id = %s AND parent_attribute_name = %L;', qi_cdb_schema, objectclass_id, parent_attribute_name) INTO attri_names;
+EXECUTE format('SELECT ARRAY_AGG(attribute_name) FROM %I.feature_attribute_metadata WHERE cdb_schema = %L AND objectclass_id = %s AND parent_attribute_name = %L;', qi_usr_schema, qi_cdb_schema, objectclass_id, parent_attribute_name) INTO attri_names;
 
 sql_attri := concat('
 SELECT 
@@ -788,13 +809,20 @@ sql_attri := concat(sql_attri,'
 	END IF;
     
     -- Update the is_multiple_value_columns, n_value_columns, value_columns
-    UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+	EXECUTE format('
+	UPDATE %I.feature_attribute_metadata AS fam
     SET 
-        is_multiple_value_columns = qi_is_multiple_val_cols, 
-        n_value_columns = qi_n_val_cols,
-        value_column = attri_val_cols, 
+        is_multiple_value_columns = %L, 
+        n_value_columns = %L,
+        value_column = %L, 
         last_modification_date = clock_timestamp()
-    WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = oc_id AND fgm.parent_attribute_name = p_attri_name AND fgm.attribute_name = attri_name;
+    WHERE fam.cdb_schema = %L 
+		AND fam.objectclass_id = %L
+		AND fam.parent_attribute_name = %L 
+		AND fam.attribute_name = %L;
+	', 
+	qi_usr_schema, qi_is_multiple_val_cols, qi_n_val_cols, attri_val_cols, 
+	qi_cdb_schema, oc_id, p_attri_name, attri_name);
 END LOOP;
 
 -- Add the FROM clause
@@ -875,12 +903,12 @@ ELSE
 END IF;
 
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 -- Get the child attributes from feature attribute metadata table
-EXECUTE format('SELECT ARRAY_AGG(attribute_name) FROM qgis_pkg.feature_attribute_metadata WHERE cdb_schema = %L AND objectclass_id = %s AND parent_attribute_name = %L;', qi_cdb_schema, objectclass_id, parent_attribute_name) INTO attri_names;
+EXECUTE format('SELECT ARRAY_AGG(attribute_name) FROM %I.feature_attribute_metadata WHERE cdb_schema = %L AND objectclass_id = %s AND parent_attribute_name = %L;', qi_usr_schema, qi_cdb_schema, objectclass_id, parent_attribute_name) INTO attri_names;
 
 sql_attri := concat('
 SELECT 
@@ -895,13 +923,21 @@ LOOP
         qi_is_multiple_val_cols := TRUE;
     END IF;
     -- Update the is_multiple_value_columns, n_value_columns, value_columns
-    UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+	EXECUTE format('
+	UPDATE %I.feature_attribute_metadata AS fam
     SET 
-        is_multiple_value_columns = qi_is_multiple_val_cols, 
-        n_value_columns = qi_n_val_cols,
-        value_column = attri_val_cols, 
+        is_multiple_value_columns = %L, 
+        n_value_columns = %L,
+        value_column = %L, 
         last_modification_date = clock_timestamp()
-    WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = oc_id AND fgm.parent_attribute_name = qi_p_attri_name AND fgm.attribute_name = attri_name;
+    WHERE fam.cdb_schema = %L 
+		AND fam.objectclass_id = %L 
+		AND fam.parent_attribute_name = %L  
+		AND fam.attribute_name = %L;
+	', 
+	qi_usr_schema, qi_is_multiple_val_cols, qi_n_val_cols, attri_val_cols,
+	qi_cdb_schema, oc_id, qi_p_attri_name, attri_name
+	);
 
 	FOREACH attri_val_col IN ARRAY attri_val_cols
 	LOOP
@@ -928,11 +964,16 @@ IF (attri_val_cols_nested IS NOT NULL AND ARRAY_LENGTH(attri_val_cols_nested,1) 
 		FOREACH attri_name IN ARRAY attri_names
 		LOOP
             -- Update ct_type_name if there are multiple val_cols
-            UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+			EXECUTE format ('
+			UPDATE %I.feature_attribute_metadata AS fam
             SET 
-                ct_type_name = qi_ct_type_name,
+                ct_type_name = %L,
                 last_modification_date = clock_timestamp()
-            WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = oc_id AND fgm.parent_attribute_name = qi_p_attri_name;
+            WHERE fam.cdb_schema = %L 
+				AND fam.objectclass_id = %L 
+				AND fam.parent_attribute_name = %L;
+			', 
+			qi_usr_schema, qi_ct_type_name, qi_cdb_schema, oc_id, qi_p_attri_name);
             
 			sql_ctb_header := concat(sql_ctb_header, attri_name, '_', iter_count::text, ' ', qi_ct_type_name, ',');
 			EXECUTE format('SELECT * FROM qgis_pkg.attribute_value_column_check(%L,%L,%L)', qi_cdb_schema, objectclass_id, attri_name) INTO attri_val_cols;
@@ -1043,8 +1084,8 @@ DECLARE
     qi_usr_schema varchar := quote_ident(usr_schema);
 	qi_cdb_schema varchar := quote_ident(cdb_schema);
     cdb_bbox_type_array CONSTANT varchar[] := ARRAY['db_schema', 'm_view', 'qgis'];
-	qi_oc_id integer := objectclass_id;
-	qi_p_attri_name text:= parent_attribute_name;
+	oc_id integer := objectclass_id;
+	p_attri_name text:= parent_attribute_name;
 	qi_is_multiple boolean DEFAULT FALSE;
     qi_max_multiplicity integer;
     srid integer;
@@ -1069,9 +1110,18 @@ ELSE
 END IF;
 
 -- Update the is_multiple and maximum multiplicity column
-UPDATE qgis_pkg.feature_attribute_metadata AS fgm
-SET is_multiple = qi_is_multiple, max_multiplicity = qi_max_multiplicity, last_modification_date = clock_timestamp()
-WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.parent_attribute_name = qi_p_attri_name;
+EXECUTE format ('
+UPDATE %I.feature_attribute_metadata AS fam
+SET 
+	is_multiple = %L, 
+	max_multiplicity = %L, 
+	last_modification_date = clock_timestamp()
+WHERE fam.cdb_schema = %L
+	AND fam.objectclass_id = %L 
+	AND fam.parent_attribute_name = %L;
+',
+qi_usr_schema, qi_is_multiple, qi_max_multiplicity, qi_cdb_schema,
+oc_id, p_attri_name);
 	
 RETURN sql_attri;
 
@@ -1201,13 +1251,15 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.get_view_column_type(varchar, varchar, varch
 ----------------------------------------------------------------
 -- The function lookup the primary key id of the given attribute
 -- If the attribute is nested, it will return the key id of its first child attribute's id
-DROP FUNCTION IF EXISTS qgis_pkg.get_attribute_key_id(varchar, integer, varchar);
+DROP FUNCTION IF EXISTS qgis_pkg.get_attribute_key_id(varchar, varchar, varchar, integer, varchar);
 CREATE OR REPLACE FUNCTION qgis_pkg.get_attribute_key_id(
+	usr_schema varchar,
 	cdb_schema varchar,
 	objectclass_id integer,
 	attribute_name varchar
 ) RETURNS integer AS $$
 DECLARE
+	qi_usr_schema varchar := quote_ident(usr_schema);
 	ql_cdb_schema varchar := quote_literal(cdb_schema);
 	ql_attri_name varchar := quote_literal(attribute_name);
 	oc_id integer := objectclass_id;
@@ -1216,14 +1268,14 @@ DECLARE
 BEGIN
 
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 -- First check Inline attribute
 sql_attri_id := concat('
 SELECT fam.id
-FROM qgis_pkg.feature_attribute_metadata AS fam
+FROM ',qi_usr_schema,'.feature_attribute_metadata AS fam
 WHERE fam.cdb_schema = ',ql_cdb_schema,' 
 	AND fam.objectclass_id = ',oc_id,' AND fam.attribute_name = ',ql_attri_name,'
 	AND fam.is_nested IS FALSE;
@@ -1235,7 +1287,7 @@ IF attri_id IS NULL THEN
 	-- Nested attribute, only return the first child attribute's id as reference
 	sql_attri_id := concat('
 	SELECT fam.id
-	FROM qgis_pkg.feature_attribute_metadata AS fam
+	FROM ',qi_usr_schema,'.feature_attribute_metadata AS fam
 	WHERE fam.cdb_schema = ',ql_cdb_schema,' 
 		AND fam.objectclass_id = ',oc_id,' AND fam.parent_attribute_name = ',ql_attri_name,'
 		AND fam.is_nested IS TRUE
@@ -1259,12 +1311,12 @@ EXCEPTION
 		RAISE EXCEPTION 'qgis_pkg.get_attribute_key_id(): %', SQLERRM;
 END;
 $$ LANGUAGE plpgsql;
-COMMENT ON FUNCTION qgis_pkg.get_attribute_key_id(varchar, integer, varchar) IS 'Lookup the primary key id of the given attribute. If the attribute is nested, it will return the key id of the first id of its child attribute';
-REVOKE EXECUTE ON FUNCTION qgis_pkg.get_attribute_key_id(varchar, integer, varchar) FROM public;
+COMMENT ON FUNCTION qgis_pkg.get_attribute_key_id(varchar, varchar, integer, varchar) IS 'Lookup the primary key id of the given attribute. If the attribute is nested, it will return the key id of the first id of its child attribute';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.get_attribute_key_id(varchar, varchar, integer, varchar) FROM public;
 -- Example
--- SELECT * FROM qgis_pkg.get_attribute_key_id('citydb', 901, 'name');
--- SELECT * FROM qgis_pkg.get_attribute_key_id('citydb', 901, 'height');
--- SELECT * FROM qgis_pkg.get_attribute_key_id('citydb', 901, '土砂災害警戒区域');
+-- SELECT * FROM qgis_pkg.get_attribute_key_id('qgis_bstsai','citydb', 901, 'name');
+-- SELECT * FROM qgis_pkg.get_attribute_key_id('qgis_bstsai','citydb', 901, 'height');
+-- SELECT * FROM qgis_pkg.get_attribute_key_id('qgis_bstsai','citydb', 901, '土砂災害警戒区域');
 
 
 ----------------------------------------------------------------
@@ -1283,7 +1335,7 @@ RETURNS text AS $$
 DECLARE
     view_col_names text[]; view_col_name text;
     av_name CONSTANT varchar := trim(both '"' from qi_av_name);
-	attri_id bigint := (SELECT qgis_pkg.get_attribute_key_id(cdb_schema, objectclass_id, attribute_name));
+	attri_id bigint := (SELECT qgis_pkg.get_attribute_key_id(qi_usr_schema, cdb_schema, objectclass_id, attribute_name));
     idx_name varchar;
 	val_col_type varchar;
     sql_statement text;
@@ -1336,7 +1388,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_attribute_view(
 	is_nested boolean DEFAULT FALSE,
 	cdb_bbox_type varchar DEFAULT 'db_schema',
 	is_matview boolean DEFAULT FALSE
-) RETURNS void AS $$
+) RETURNS varchar AS $$
 DECLARE
 	qi_usr_schema varchar := quote_ident(usr_schema);
 	qi_cdb_schema varchar := quote_ident(cdb_schema);
@@ -1353,6 +1405,9 @@ DECLARE
 	sql_view_header text;
 	sql_mv_footer text;
 	sql_view text;
+	inline_exist boolean;
+	nested_exist boolean;
+
 BEGIN
 -- Check if cdb_name exists
 IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata AS i WHERE i.schema_name::varchar = qi_cdb_schema) THEN
@@ -1370,22 +1425,33 @@ IF cdb_bbox_type IS NULL OR NOT (cdb_bbox_type = ANY (cdb_bbox_type_array)) THEN
 END IF;
 
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 
 -- Check if the attribute is in the feature attribute metadata table and generate view name(s)
 IF NOT is_nested THEN
-	IF NOT EXISTS(SELECT 1 FROM qgis_pkg.feature_attribute_metadata AS fam WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = qi_oc_id AND fam.attribute_name = qi_attri_name) THEN
-		RAISE EXCEPTION 'Inline attribute "%" does not exist in schema % (extent type: %). Please scan and check it first in the qgis_pkg.feature_attribute_metadata table!', attribute_name, cdb_schema, cdb_bbox_type;
+	EXECUTE format('
+	SELECT 1 FROM %I.feature_attribute_metadata AS fam 
+	WHERE fam.cdb_schema = %L
+		AND fam.objectclass_id = %L 
+		AND fam.attribute_name = %L', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name) INTO inline_exist;
+	IF NOT inline_exist THEN
+		RAISE EXCEPTION 'Inline attribute "%" does not exist in schema % (extent type: %). Please scan and check it first in the %.feature_attribute_metadata table!', attribute_name, cdb_schema, cdb_bbox_type, usr_schema;
 	ELSE
 		qi_layer_name := concat('i_', objectclass_id, '_', attribute_name);
 		EXECUTE format('SELECT qgis_pkg.collect_inline_attribute(%L, %L, %s, %L, %L);', qi_usr_schema, qi_cdb_schema, objectclass_id, attribute_name, cdb_bbox_type) INTO sql_attri;
 	END IF;
 ELSE
-	IF NOT EXISTS(SELECT 1 FROM qgis_pkg.feature_attribute_metadata AS fam WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = qi_oc_id AND fam.parent_attribute_name = qi_attri_name) THEN
-		RAISE EXCEPTION 'Nested attribute "%" does not exist in schema % (extent type: %). Please scan and check it first in the qgis_pkg.feature_attribute_metadata table!', attribute_name, cdb_schema, cdb_bbox_type;
+	EXECUTE format('
+	SELECT 1 FROM %I.feature_attribute_metadata AS fam 
+	WHERE fam.cdb_schema = %L 
+		AND fam.objectclass_id = %L 
+		AND fam.parent_attribute_name = %L
+	', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name) INTO nested_exist;
+	IF NOT nested_exist THEN
+		RAISE EXCEPTION 'Nested attribute "%" does not exist in schema % (extent type: %). Please scan and check it first in the %.feature_attribute_metadata table!', attribute_name, cdb_schema, cdb_bbox_type, usr_schema;
 	ELSE
 		qi_layer_name := concat('n_', objectclass_id, '_', attribute_name);
 		EXECUTE format('SELECT qgis_pkg.collect_nested_attribute(%L, %L, %s, %L, %L);', qi_usr_schema, qi_cdb_schema, objectclass_id, attribute_name, cdb_bbox_type) INTO sql_attri;
@@ -1434,46 +1500,64 @@ IF sql_attri IS NOT NULL THEN
 	IF NOT is_matview THEN
 		IF NOT is_nested THEN
 			-- Update the view_name, creation_date
-			UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+			EXECUTE format('
+			UPDATE %I.feature_attribute_metadata AS fam
 			SET 
-				view_name = qi_layer_name, 
+				view_name = %L, 
 				view_creation_date = clock_timestamp()
-			WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.attribute_name = qi_attri_name;
+			WHERE fam.cdb_schema = %L 
+				AND fam.objectclass_id = %L 
+				AND fam.attribute_name = %L;
+			', qi_usr_schema, qi_layer_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		ELSE
 			-- Update the view_name, creation_date
-			UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+			EXECUTE format('
+			UPDATE %I.feature_attribute_metadata AS fam
 			SET 
-				view_name = qi_layer_name, 
+				view_name = %L, 
 				view_creation_date = clock_timestamp()
-			WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.parent_attribute_name = qi_attri_name;
+			WHERE fam.cdb_schema = %L 
+				AND fam.objectclass_id = %L 
+				AND fam.parent_attribute_name = %L;
+			', qi_usr_schema, qi_layer_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		END IF;
 	ELSE
 		IF NOT is_nested THEN
 			-- Generate attribute mv footer
-			EXECUTE format('SELECT qgis_pkg.generate_sql_attribute_matview_footer(%L, %L, %L, %L, %L, %L, %L)',qi_usr_name, usr_schema, qi_layer_name, qi_cdb_schema, objectclass_id, attribute_name, is_nested) INTO sql_mv_footer;
+			EXECUTE format('SELECT qgis_pkg.generate_sql_attribute_matview_footer(%L, %L, %L, %L, %L, %L)',qi_usr_name, usr_schema, qi_layer_name, qi_cdb_schema, objectclass_id, attribute_name) INTO sql_mv_footer;
 			EXECUTE sql_mv_footer;
 			-- Update the mview_name, creation_date
-			UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+			EXECUTE format('
+			UPDATE %I.feature_attribute_metadata AS fam
 			SET 
-				mview_name = qi_layer_name, 
+				mview_name = %L, 
 				mview_refresh_date = clock_timestamp()
-			WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.attribute_name = qi_attri_name;
+			WHERE fam.cdb_schema = %L 
+				AND fam.objectclass_id = %L 
+				AND fam.attribute_name = %L;
+			', qi_usr_schema, qi_layer_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		ELSE
 			-- Update the mview_name, mv_refresh_date
 			-- Generate attribute mv footer
-			EXECUTE format('SELECT qgis_pkg.generate_sql_attribute_matview_footer(%L, %L, %L, %L, %L, %L, %L)',qi_usr_name, usr_schema, qi_layer_name, qi_cdb_schema, objectclass_id, attribute_name, is_nested) INTO sql_mv_footer;
+			EXECUTE format('SELECT qgis_pkg.generate_sql_attribute_matview_footer(%L, %L, %L, %L, %L, %L)',qi_usr_name, usr_schema, qi_layer_name, qi_cdb_schema, objectclass_id, attribute_name) INTO sql_mv_footer;
 			EXECUTE sql_mv_footer;
 			-- Update the mview_name, creation_date
-			UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+			EXECUTE format('
+			UPDATE %I.feature_attribute_metadata AS fam
 			SET 
-				mview_name = qi_layer_name, 
+				mview_name = %L, 
 				mview_refresh_date = clock_timestamp()
-			WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.parent_attribute_name = qi_attri_name;
+			WHERE fam.cdb_schema = %L 
+				AND fam.objectclass_id = %L 
+				AND fam.parent_attribute_name = %L;
+			', qi_usr_schema, qi_layer_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		END IF;
 	END IF;
 ELSE
 	RAISE EXCEPTION 'The sql_attri is null. Please check the existence of attribute values in schema %', cdb_schema;
 END IF;
+
+RETURN concat(qi_usr_schema, '.', qi_layer_name);
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
@@ -1536,22 +1620,26 @@ IF cdb_bbox_type IS NULL OR NOT (cdb_bbox_type = ANY (cdb_bbox_type_array)) THEN
 END IF;
 
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 IF objectclass_id IS NOT NULL THEN
 	classname := (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema,oc_id));
 	-- Create all attribute view or materialized view of the given objectclass_id within the schema
 	RAISE NOTICE 'Create all attribute % of % (oc_id = %) in cdb_schema %', view_type_pl, classname, oc_id, cdb_schema;
-    FOR r IN 
+    FOR r IN
+		EXECUTE format('
         SELECT fam.cdb_schema, fam.objectclass_id, fam.classname, fam.parent_attribute_name, fam.attribute_name, fam.is_nested
-        FROM qgis_pkg.feature_attribute_metadata AS fam
-        WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = oc_id AND is_nested IS FALSE
+        FROM %I.feature_attribute_metadata AS fam
+        WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.is_nested IS FALSE
 		UNION ALL
-		SELECT DISTINCT fam.cdb_schema, fam.objectclass_id, fam.classname, fam.parent_attribute_name, '-' AS attribute_name, fam.is_nested
-        FROM qgis_pkg.feature_attribute_metadata AS fam
-        WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = oc_id AND is_nested IS TRUE
+		SELECT DISTINCT fam.cdb_schema, fam.objectclass_id, fam.classname, fam.parent_attribute_name, ''-'' AS attribute_name, fam.is_nested
+        FROM %I.feature_attribute_metadata AS fam
+        WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.is_nested IS TRUE
+		', 
+		qi_usr_schema, qi_cdb_schema, oc_id,
+		qi_usr_schema, qi_cdb_schema, oc_id)
     LOOP
         IF r.is_nested = 'FALSE' THEN
 			attri_name := r.attribute_name;
@@ -1574,14 +1662,18 @@ IF objectclass_id IS NOT NULL THEN
 ELSE
 	-- Create all existing attribute view or materialized view within the schema
 	RAISE NOTICE 'Create all attribute % in cdb_schema %', view_type_pl, cdb_schema;
-    FOR r IN 
+    FOR r IN
+		EXECUTE format('
         SELECT fam.cdb_schema, fam.objectclass_id, fam.classname, fam.parent_attribute_name, fam.attribute_name, fam.is_nested
-        FROM qgis_pkg.feature_attribute_metadata AS fam
-        WHERE fam.cdb_schema = qi_cdb_schema AND is_nested IS FALSE
+        FROM %I.feature_attribute_metadata AS fam
+        WHERE fam.cdb_schema = %L AND fam.is_nested IS FALSE
 		UNION ALL
-		SELECT DISTINCT fam.cdb_schema, fam.objectclass_id, fam.classname, fam.parent_attribute_name, '-' AS attribute_name, fam.is_nested
-        FROM qgis_pkg.feature_attribute_metadata AS fam
-        WHERE fam.cdb_schema = qi_cdb_schema AND is_nested IS TRUE
+		SELECT DISTINCT fam.cdb_schema, fam.objectclass_id, fam.classname, fam.parent_attribute_name, ''-'' AS attribute_name, fam.is_nested
+        FROM %I.feature_attribute_metadata AS fam
+        WHERE fam.cdb_schema = %L AND fam.is_nested IS TRUE
+		',
+		qi_usr_schema, qi_cdb_schema,
+		qi_usr_schema, qi_cdb_schema)
     LOOP
         IF r.is_nested = 'FALSE' THEN
 			attri_name := r.attribute_name;
@@ -1654,16 +1746,18 @@ DECLARE
 	
 BEGIN
 -- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 IF NOT is_nested THEN
 	-- Inline attribute
-	FOR r IN 
+	FOR r IN
+		EXECUTE format('
 		SELECT fam.view_name, fam.mview_name, fam.ct_type_name
-		FROM qgis_pkg.feature_attribute_metadata AS fam
-		WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = qi_oc_id AND fam.attribute_name = qi_attri_name
+		FROM %I.feature_attribute_metadata AS fam
+		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.attribute_name = %L
+		', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name)
 	LOOP
 		av_name  := r.view_name;
 		amv_name := r.mview_name;
@@ -1685,23 +1779,27 @@ IF NOT is_nested THEN
 			EXECUTE sql_drop;
 		END IF;
 		-- Delete view_name info
-		UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+		EXECUTE format('
+		UPDATE %I.feature_attribute_metadata AS fam
 		SET 
 			ct_type_name = NULL,
 			view_name = NULL, 
 			view_creation_date = NULL,
 			mview_name = NULL,
 			mview_refresh_date = NULL
-		WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.attribute_name = qi_attri_name;
+		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.attribute_name = %L;
+		', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		-- RAISE NOTICE '(Materialized) view of inline attribute % of class % in cdb_schema % is dropped!', attribute_name, classname, cdb_schema;
 	END LOOP;
 ELSE
 	-- Nested attribute
-	FOR r IN 
+	FOR r IN
+		EXECUTE format(' 
 		SELECT fam.view_name, fam.mview_name, fam.ct_type_name
-		FROM qgis_pkg.feature_attribute_metadata AS fam
-		WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = qi_oc_id AND fam.parent_attribute_name = qi_attri_name
+		FROM %I.feature_attribute_metadata AS fam
+		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.parent_attribute_name = %L
 		LIMIT 1
+		', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name)
 	LOOP
 		av_name  := r.view_name;
 		amv_name := r.mview_name;
@@ -1723,14 +1821,16 @@ ELSE
 			EXECUTE sql_drop;
 		END IF;
 		-- Delete view_name info
-		UPDATE qgis_pkg.feature_attribute_metadata AS fgm
+		EXECUTE format('
+		UPDATE %I.feature_attribute_metadata AS fam
 		SET 
 			ct_type_name = NULL,
 			view_name = NULL, 
 			view_creation_date = NULL,
 			mview_name = NULL,
 			mview_refresh_date = NULL
-		WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.objectclass_id = qi_oc_id AND fgm.parent_attribute_name = qi_attri_name;
+		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.parent_attribute_name = %L;
+		', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		-- RAISE NOTICE '(Materialized) views of nested attribute % of class % in cdb_schema % are dropped!', attribute_name, classname, cdb_schema;
 	END LOOP;
 END IF;
@@ -1741,11 +1841,11 @@ EXCEPTION
   	WHEN OTHERS THEN
 		RAISE EXCEPTION 'qgis_drop_attribute_view(): %', SQLERRM;
 END;
-$$ LANGUAGE PLPGSQL;
+$$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION qgis_pkg.drop_attribute_view(varchar, varchar, integer, text, boolean) IS 'Drop specified attribute (materialized) views of the given objectclass feature in the schema';
 REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_attribute_view(varchar, varchar, integer, text, boolean) FROM PUBLIC;
 -- Example
--- SELECT * FROM qgis_pkg.drop_attribute_view('qgis_bstsai', 'citydb', 901, 'name');
+-- SELECT * FROM qgis_pkg.drop_attribute_view('qgis_bstsai', 'citydb', 901, 'function');
 -- SELECT * FROM qgis_pkg.drop_attribute_view('qgis_bstsai', 'citydb', 901, 'height', TRUE);
 
 
@@ -1775,26 +1875,34 @@ IF objectclass_id IS NOT NULL THEN
 	classname := (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, objectclass_id));
 	RAISE NOTICE 'Drop all attribute (materialized) view(s) of % (oc_id = %) in schema %', classname, qi_oc_id, cdb_schema;
 	FOR r IN 
+		EXECUTE format('
 		SELECT fam.attribute_name, fam.is_nested
-		FROM qgis_pkg.feature_attribute_metadata AS fam
-		WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = qi_oc_id AND is_nested IS FALSE
+		FROM %I.feature_attribute_metadata AS fam
+		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.is_nested IS FALSE
 		UNION ALL		
 		SELECT DISTINCT fam.parent_attribute_name AS attribute_name, fam.is_nested
-		FROM qgis_pkg.feature_attribute_metadata AS fam
-		WHERE fam.cdb_schema = qi_cdb_schema AND fam.objectclass_id = qi_oc_id AND is_nested IS TRUE
+		FROM %I.feature_attribute_metadata AS fam
+		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.is_nested IS TRUE
+		',
+		qi_usr_schema, qi_cdb_schema, qi_oc_id,
+		qi_usr_schema, qi_cdb_schema, qi_oc_id)
 	LOOP
 		PERFORM qgis_pkg.drop_attribute_view(qi_usr_schema, qi_cdb_schema, qi_oc_id, r.attribute_name, r.is_nested);
 	END LOOP;
 ELSE
 	RAISE NOTICE 'Drop all attribute (materialized) view(s) in schema %', cdb_schema;
-	FOR r IN 
+	FOR r IN
+		EXECUTE format('
 		SELECT fam.objectclass_id, fam.attribute_name, fam.view_name, fam.mview_name, fam.is_nested
-		FROM qgis_pkg.feature_attribute_metadata AS fam
-		WHERE fam.cdb_schema = qi_cdb_schema AND is_nested IS FALSE
+		FROM %I.feature_attribute_metadata AS fam
+		WHERE fam.cdb_schema = %L AND fam.is_nested IS FALSE
 		UNION ALL		
 		SELECT DISTINCT fam.objectclass_id, fam.parent_attribute_name AS attribute_name, fam.view_name, fam.mview_name, fam.is_nested
-		FROM qgis_pkg.feature_attribute_metadata AS fam
-		WHERE fam.cdb_schema = qi_cdb_schema AND is_nested IS TRUE
+		FROM %I.feature_attribute_metadata AS fam
+		WHERE fam.cdb_schema = %L AND fam.is_nested IS TRUE
+		',
+		qi_usr_schema, qi_cdb_schema,
+		qi_usr_schema, qi_cdb_schema)
 	LOOP
 		PERFORM qgis_pkg.drop_attribute_view(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.attribute_name, r.is_nested);
 	END LOOP;

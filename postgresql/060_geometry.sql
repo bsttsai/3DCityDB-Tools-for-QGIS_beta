@@ -2,8 +2,9 @@
 -- Create FUNCTION QGIS_PKG.GET_GEOMETRY_KEY_ID()
 ----------------------------------------------------------------
 -- The function lookup the primary key id of the given parent_objectclass_id, objectclass_id and geometry_name
-DROP FUNCTION IF EXISTS qgis_pkg.get_geometry_key_id(varchar, integer, integer, varchar, integer);
+DROP FUNCTION IF EXISTS qgis_pkg.get_geometry_key_id(varchar, varchar, integer, integer, varchar, integer);
 CREATE OR REPLACE FUNCTION qgis_pkg.get_geometry_key_id(
+	usr_schema varchar,
 	cdb_schema varchar,
 	parent_objectclass_id integer,
 	objectclass_id integer,
@@ -11,9 +12,10 @@ CREATE OR REPLACE FUNCTION qgis_pkg.get_geometry_key_id(
 	lod integer
 ) RETURNS integer AS $$
 DECLARE
+	qi_usr_schema varchar := quote_ident(usr_schema);
 	qi_cdb_schema varchar := quote_ident(cdb_schema);
 	ql_cdb_schema varchar := quote_literal(cdb_schema);
-	ql_geom_name varchar := quote_literal(geometry_name);
+	ql_geom_name  varchar := quote_literal(geometry_name);
 	p_oc_id integer := parent_objectclass_id;
 	oc_id integer := objectclass_id;
 	parent_classname text;
@@ -23,9 +25,9 @@ DECLARE
     geom_id integer;
 BEGIN
 
--- Check if feature attribute metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_attribute_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_attribute_metadata table not yet created. Please create it first';
+-- Check if feature geometry metadata table exists
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+	RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 -- Check if cdb_schema exists
@@ -44,7 +46,7 @@ END IF;
 	
 sql_geom_id := concat('
 SELECT fgm.id AS geom_id
-FROM qgis_pkg.feature_geometry_metadata AS fgm
+FROM ',qi_usr_schema,'.feature_geometry_metadata AS fgm
 WHERE fgm.cdb_schema = ',ql_cdb_schema,' 
 	AND fgm.parent_objectclass_id = ',p_oc_id,' AND fgm.objectclass_id = ',oc_id,' AND fgm.geometry_name = ',ql_geom_name,' AND fgm.lod = ',lod,'::text;
 ');
@@ -63,14 +65,14 @@ EXCEPTION
 		RAISE EXCEPTION 'qgis_pkg.get_geometry_key_id(): %', SQLERRM;
 END;
 $$ LANGUAGE plpgsql;
-COMMENT ON FUNCTION qgis_pkg.get_geometry_key_id(varchar, integer, integer, varchar, integer) IS 'Lookup the primary key id of the given geometry name.';
-REVOKE EXECUTE ON FUNCTION qgis_pkg.get_geometry_key_id(varchar, integer, integer, varchar, integer) FROM public;
+COMMENT ON FUNCTION qgis_pkg.get_geometry_key_id(varchar, varchar, integer, integer, varchar, integer) IS 'Lookup the primary key id of the given geometry name.';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.get_geometry_key_id(varchar, varchar, integer, integer, varchar, integer) FROM public;
 -- Example
--- SELECT * FROM qgis_pkg.get_geometry_key_id('citydb', 0, 901, 'lod1Solid');
--- SELECT * FROM qgis_pkg.get_geometry_key_id('citydb', 901, 709, 'lod2MultiSurface');
--- SELECT * FROM qgis_pkg.get_geometry_key_id('citydb', 0, 901, 'lod2Solid');
--- SELECT * FROM qgis_pkg.get_geometry_key_id('vienna_v5', 0, 502, 'tin', 2);
--- SELECT * FROM qgis_pkg.get_geometry_key_id('citydb', 901, 709, 'lod1MultiSurface'); -- error test
+-- SELECT * FROM qgis_pkg.get_geometry_key_id('qgis_bstsai','citydb', 0, 901, 'lod1Solid');
+-- SELECT * FROM qgis_pkg.get_geometry_key_id('qgis_bstsai','citydb', 901, 709, 'lod2MultiSurface');
+-- SELECT * FROM qgis_pkg.get_geometry_key_id('qgis_bstsai','citydb', 0, 901, 'lod2Solid');
+-- SELECT * FROM qgis_pkg.get_geometry_key_id('qgis_bstsai','vienna_v5', 0, 502, 'tin', 2);
+-- SELECT * FROM qgis_pkg.get_geometry_key_id('qgis_bstsai','citydb', 901, 709, 'lod1MultiSurface'); -- error test
 
 
 ----------------------------------------------------------------
@@ -495,7 +497,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_geometry_view(
 	is_matview boolean DEFAULT FALSE,
 	cdb_bbox_type varchar DEFAULT 'db_schema'	
 ) 
-RETURNS void AS $$
+RETURNS varchar AS $$
 DECLARE
 	-- view detail
 	qi_usr_name varchar			:= (SELECT substring(usr_schema from 'qgis_(.*)') AS usr_name);
@@ -549,14 +551,13 @@ IF qi_usr_schema IS NULL OR NOT EXISTS(SELECT * FROM information_schema.schemata
 END IF;
 
 -- Check if feature geometry metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_geometry_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_geometry_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+	RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 -- Check if feature geometry is deprecated geometry type
 IF ql_p_geom_type IS NULL THEN
-	RAISE NOTICE 'The geometry_name "%" is a deprecated geometry type in CityGML v.3.0! Skip create_geometry_view()', geometry_name;
-	RETURN;
+	RAISE EXCEPTION 'The geometry_name "%" is a deprecated geometry type in CityGML v.3.0! Skip create_geometry_view()', geometry_name;
 END IF;
 
 -- Get the srid, necessary datatype_ids and objectclass_ids of relief_components from the cdb_schema
@@ -630,7 +631,7 @@ ELSE
             sql_geometry := (SELECT qgis_pkg.create_geometry_address(qi_cdb_schema, oc_id, sql_where));
             sql_geometry_count := (SELECT qgis_pkg.create_geometry_address(qi_cdb_schema, oc_id, sql_where, TRUE));
 		ELSE
-			RAISE NOTICE 'Datatype_id is wrong, it should be geometry, implicit geometry or address property. Please check in the qgis_pkg.feature_geometry_metadata table !';
+			RAISE NOTICE 'Datatype_id is wrong, it should be geometry, implicit geometry or address property. Please check in the %.feature_geometry_metadata table !', qi_usr_schema;
 		END IF;
 	ELSE
         -- Boundary Feature
@@ -652,28 +653,32 @@ IF IS_MATVIEW THEN
 	mv_end_time := clock_timestamp();
 	mv_create_time :=  mv_end_time - mv_start_time;
 	RAISE NOTICE '%: "%" creation time: %', view_type, qi_gv_name, mv_create_time;
-    UPDATE qgis_pkg.feature_geometry_metadata AS fgm
-    SET 
-        is_matview = TRUE,
-        mview_name = qi_gv_name,
-        mv_creation_time = mv_create_time
-    WHERE
-        fgm.cdb_schema = qi_cdb_schema AND fgm.parent_objectclass_id = p_oc_id AND
-        fgm.objectclass_id = oc_id AND fgm.geometry_name = ql_geom_name AND fgm.lod = ql_lod;
+	EXECUTE format('
+		UPDATE %I.feature_geometry_metadata AS fgm
+		SET 
+			is_matview = TRUE,
+			mview_name = %L,
+			mv_creation_time = %L
+		WHERE
+			fgm.cdb_schema = %L AND fgm.parent_objectclass_id = %L AND
+			fgm.objectclass_id = %L AND fgm.geometry_name = %L AND fgm.lod = %L;
+	', qi_usr_schema, qi_gv_name, mv_create_time, qi_cdb_schema, p_oc_id, oc_id, ql_geom_name, ql_lod);
 ELSE
 	v_start_time := clock_timestamp();
 	EXECUTE sql_view;
 	v_end_time := clock_timestamp();
 	v_creation_time := v_end_time - v_start_time;
 	RAISE NOTICE '%: "%" creation time: %', view_type, qi_gv_name, v_creation_time;
-    UPDATE qgis_pkg.feature_geometry_metadata AS fgm
-    SET 
-        view_name = qi_gv_name
+	EXECUTE format('
+	UPDATE %I.feature_geometry_metadata AS fgm
+    SET view_name = %L
     WHERE
-        fgm.cdb_schema = qi_cdb_schema AND fgm.parent_objectclass_id = p_oc_id AND 
-		fgm.objectclass_id = oc_id AND fgm.geometry_name = ql_geom_name AND fgm.lod = ql_lod;
+        fgm.cdb_schema = %L AND fgm.parent_objectclass_id = %L AND 
+		fgm.objectclass_id = %L AND fgm.geometry_name = %L AND fgm.lod = %L;
+	', qi_usr_schema, qi_gv_name, qi_cdb_schema, p_oc_id, oc_id, ql_geom_name, ql_lod);
 END IF;
 
+RETURN concat(qi_usr_schema, '.', qi_gv_name);
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
@@ -743,8 +748,8 @@ IF cdb_bbox_type IS NULL OR NOT (cdb_bbox_type = ANY (cdb_bbox_type_array)) THEN
 END IF;
 
 -- Check if feature geometry metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_geometry_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_geometry_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+	RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 
@@ -754,11 +759,13 @@ IF objectclass_id IS NOT NULL AND parent_objectclass_id <> 0 THEN
     classname := (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id));
     -- Create all attribute view or materialized view of the given parent and child objectclass_id within the schema
 	RAISE NOTICE 'Create all geometry % of %-% (p_od_id = %, oc_id = %) in cdb_schema %', view_type_pl, parent_classname, classname, p_oc_id, oc_id, cdb_schema;
-    FOR r IN 
-        SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.datatype_id, fgm.geometry_name, fgm.lod, fgm.geometry_type, fgm.postgis_geom_type
-        FROM qgis_pkg.feature_geometry_metadata AS fgm
-        WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.parent_objectclass_id = p_oc_id AND fgm.objectclass_id = oc_id
-		ORDER BY fgm.id ASC
+    FOR r IN
+		EXECUTE format('
+			SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.datatype_id, fgm.geometry_name, fgm.lod, fgm.geometry_type, fgm.postgis_geom_type
+			FROM %I.feature_geometry_metadata AS fgm
+			WHERE fgm.cdb_schema = %L AND fgm.parent_objectclass_id = %L AND fgm.objectclass_id = %L
+			ORDER BY fgm.id ASC
+		', qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id)
     LOOP
         PERFORM qgis_pkg.create_geometry_view(
             qi_usr_schema,
@@ -780,11 +787,13 @@ ELSIF objectclass_id IS NOT NULL AND parent_objectclass_id = 0 THEN
     classname := (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id));
     -- Create all attribute view or materialized view of the given parent objectclass_id within the schema
 	RAISE NOTICE 'Create all geometry % of % (oc_id = %) in cdb_schema %', view_type_pl, classname, oc_id, cdb_schema;
-    FOR r IN 
-        SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.datatype_id, fgm.geometry_name, fgm.lod, fgm.geometry_type, fgm.postgis_geom_type
-        FROM qgis_pkg.feature_geometry_metadata AS fgm
-        WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.parent_objectclass_id = p_oc_id AND fgm.objectclass_id = oc_id
-		ORDER BY fgm.id ASC
+    FOR r IN
+		EXECUTE format('
+			SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.datatype_id, fgm.geometry_name, fgm.lod, fgm.geometry_type, fgm.postgis_geom_type
+        	FROM %I.feature_geometry_metadata AS fgm
+        	WHERE fgm.cdb_schema = %L AND fgm.parent_objectclass_id = %L AND fgm.objectclass_id = %L
+			ORDER BY fgm.id ASC
+		', qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id)
     LOOP
         PERFORM qgis_pkg.create_geometry_view(
             qi_usr_schema,
@@ -805,12 +814,13 @@ ELSIF objectclass_id IS NULL AND parent_objectclass_id IS NULL THEN
     -- All feature
     -- Create all attribute view or materialized view within the schema
 	RAISE NOTICE 'Create all geometry % in cdb_schema %', view_type_pl, cdb_schema;
-    FOR r IN 
-        SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.datatype_id, fgm.geometry_name, fgm.lod, fgm.geometry_type, fgm.postgis_geom_type
-        FROM qgis_pkg.feature_geometry_metadata AS fgm
-        WHERE fgm.cdb_schema = qi_cdb_schema
-		ORDER BY fgm.id ASC
-        -- AND fgm.parent_objectclass_id = p_oc_id AND fgm.objectclass_id = oc_id
+    FOR r IN
+		EXECUTE format('
+			SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.datatype_id, fgm.geometry_name, fgm.lod, fgm.geometry_type, fgm.postgis_geom_type
+			FROM %I.feature_geometry_metadata AS fgm
+			WHERE fgm.cdb_schema = %L
+			ORDER BY fgm.id ASC
+		', qi_usr_schema, qi_cdb_schema)
     LOOP
         PERFORM qgis_pkg.create_geometry_view(
             qi_usr_schema,
@@ -828,7 +838,7 @@ ELSIF objectclass_id IS NULL AND parent_objectclass_id IS NULL THEN
     END LOOP;
     RAISE NOTICE 'All available %(s) of all feature in schema "%" are created successfully in user schema "%"', LOWER(view_type), qi_cdb_schema, qi_usr_schema;
 ELSIF NOT FOUND THEN
-    RAISE EXCEPTION 'Specified parent and child objectclass_ids not found. Please check and update the qgis_pkg.feature_geometry_metadata table first!';
+    RAISE EXCEPTION 'Specified parent and child objectclass_ids not found. Please check and update the %.feature_geometry_metadata table first!', qi_usr_schema;
 END IF;
  
 EXCEPTION
@@ -860,7 +870,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.refresh_geometry_materialized_view(
 	objectclass_id integer,
     geometry_name text
 ) 
-RETURNS void AS $$
+RETURNS varchar AS $$
 DECLARE
 	qi_usr_schema varchar 	:= quote_ident(usr_schema);
     qi_cdb_schema varchar 	:= quote_ident(cdb_schema);
@@ -885,9 +895,9 @@ IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata
 	RAISE EXCEPTION 'cdb_schema (%) not found. It must be an existing schema', qi_cdb_schema;
 END IF;
 	
--- Check if qgis_pkg.feature geometry metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_geometry_metadata') THEN
-    RAISE EXCEPTION 'qgis_pkg.feature_geometry_metadata table not yet created. Please create it first';
+-- Check if feature geometry metadata table exists
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+    RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 IF parent_objectclass_id IS NOT NULL AND objectclass_id IS NOT NULL AND geometry_name IS NOT NULL THEN
@@ -903,11 +913,13 @@ IF parent_objectclass_id IS NOT NULL AND objectclass_id IS NOT NULL AND geometry
 	END IF;
 END IF;
 	
-FOR r IN 
-    SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.mview_name
-    FROM qgis_pkg.feature_geometry_metadata AS fgm
-    WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.parent_objectclass_id = p_oc_id AND fgm.objectclass_id = oc_id 
-		AND fgm.geometry_name = geom_name AND fgm.mview_name IS NOT NULL
+FOR r IN
+	EXECUTE format('
+		SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.mview_name
+		FROM %I.feature_geometry_metadata AS fgm
+		WHERE fgm.cdb_schema = %L AND fgm.parent_objectclass_id = %L AND fgm.objectclass_id = %L
+			AND fgm.geometry_name = %L AND fgm.mview_name IS NOT NULL
+	', qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id, geom_name)
 LOOP
 	IF r.mview_name IS NOT NULL THEN
 		mview_exists := TRUE;
@@ -916,19 +928,19 @@ LOOP
 	    EXECUTE sql_mv_refresh;
 	    end_time := clock_timestamp();
 	    mv_refresh_t := end_time - start_time;
-	    UPDATE qgis_pkg.feature_geometry_metadata AS fgm
-	    SET 
-	        mv_refresh_time = mv_refresh_t,
-	        mv_last_update_time = end_time
-	    WHERE
-	        fgm.cdb_schema = qi_cdb_schema AND fgm.mview_name = r.mview_name;
-		RAISE NOTICE 'Done refresh geometry materialized view of %-% in cdb_schema % ', target_class, geometry_name, cdb_schema;
+		EXECUTE format('
+			UPDATE %I.feature_geometry_metadata
+			SET mv_refresh_time = %L, mv_last_update_time = %L
+			WHERE cdb_schema = %L AND mview_name = %L
+		', qi_usr_schema, mv_refresh_t, end_time, qi_cdb_schema, r.mview_name);
 	END IF;
 END LOOP;
 
 IF NOT mview_exists THEN
 	RAISE EXCEPTION 'No geometry % materialized view of % found in schema %', target_class, geometry_name, cdb_schema;
 END IF;
+
+RETURN concat(qi_usr_schema, '.', r.mview_name);
  
 EXCEPTION
     WHEN QUERY_CANCELED THEN
@@ -979,9 +991,9 @@ IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata
 	RAISE EXCEPTION 'cdb_schema (%) not found. It must be an existing schema', qi_cdb_schema;
 END IF;
 	
--- Check if qgis_pkg.feature geometry metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_geometry_metadata') THEN
-    RAISE EXCEPTION 'qgis_pkg.feature_geometry_metadata table not yet created. Please create it first';
+-- Check if feature geometry metadata table exists
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+    RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 IF NOT (parent_objectclass_id IS NULL AND objectclass_id IS NULL) THEN
@@ -996,11 +1008,13 @@ IF NOT (parent_objectclass_id IS NULL AND objectclass_id IS NULL) THEN
 		RAISE NOTICE 'Refresh % (oc_id = %) materialized view(s) in schema %', classname, oc_id, cdb_schema;
 	END IF;
 	
-	FOR r IN 
-	    SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.geometry_name, fgm.mview_name
-	    FROM qgis_pkg.feature_geometry_metadata AS fgm
-	    WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.parent_objectclass_id = p_oc_id AND fgm.objectclass_id = oc_id 
+	FOR r IN
+		EXECUTE format('
+			SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.geometry_name, fgm.mview_name
+	    	FROM %I.feature_geometry_metadata AS fgm
+	    	WHERE fgm.cdb_schema = %L AND fgm.parent_objectclass_id = %L AND fgm.objectclass_id = %L
 			AND fgm.mview_name IS NOT NULL
+		',qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id)
 	LOOP
 		mview_exists := TRUE;
 		PERFORM qgis_pkg.refresh_geometry_materialized_view(
@@ -1012,10 +1026,12 @@ IF NOT (parent_objectclass_id IS NULL AND objectclass_id IS NULL) THEN
 		);
 	END LOOP;
 ELSE
-	FOR r IN 
-	    SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.geometry_name, fgm.mview_name
-	    FROM qgis_pkg.feature_geometry_metadata AS fgm
-	    WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.mview_name IS NOT NULL
+	FOR r IN
+		EXECUTE format('
+			SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.geometry_name, fgm.mview_name
+	    	FROM %I.feature_geometry_metadata AS fgm
+	    	WHERE fgm.cdb_schema = %L AND fgm.mview_name IS NOT NULL
+		', qi_usr_schema, qi_cdb_schema)
 	LOOP
 		mview_exists := TRUE;
 		PERFORM qgis_pkg.refresh_geometry_materialized_view(
@@ -1046,11 +1062,6 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION qgis_pkg.refresh_all_geometry_materialized_view(varchar, varchar, integer, integer) IS 'Refresh all materialized views in a given schema (of parent-child objectclass_id)';
 REVOKE EXECUTE ON FUNCTION qgis_pkg.refresh_all_geometry_materialized_view(varchar, varchar, integer, integer) FROM PUBLIC;
 -- Example
--- SELECT * FROM qgis_pkg.create_all_geometry_view_in_schema('qgis_bstsai', 'citydb', 0, 901, TRUE);
--- SELECT * FROM qgis_pkg.drop_all_geometry_views('qgis_bstsai', 'citydb'); -- drop all v & mv
--- SELECT * FROM qgis_pkg.drop_all_geometry_views('qgis_bstsai', 'citydb', 0, 901); -- drop all v & mv of oc_id = 901
--- SELECT * FROM qgis_pkg.refresh_geometry_materialized_view('qgis_bstsai', 'citydb', 0, 901, 'lod1Solid'); -- refresh mv of 901-lod1Solid
--- SELECT * FROM qgis_pkg.refresh_all_geometry_materialized_view('qgis_bstsai', 'citydb', 0, 901);
 -- SELECT * FROM qgis_pkg.refresh_all_geometry_materialized_view('qgis_bstsai', 'citydb');
 -- SELECT * FROM qgis_pkg.refresh_all_geometry_materialized_view('qgis_bstsai', 'citydb', 0, 901);
 -- SELECT * FROM qgis_pkg.refresh_all_geometry_materialized_view('qgis_bstsai', 'citydb', 901, 709);
@@ -1097,8 +1108,8 @@ IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata
 END IF;
 	
 -- Check if feature geometry metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_geometry_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_geometry_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+	RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 IF parent_objectclass_id IS NOT NULL AND objectclass_id IS NOT NULL AND geometry_name IS NOT NULL THEN
@@ -1114,41 +1125,44 @@ IF parent_objectclass_id IS NOT NULL AND objectclass_id IS NOT NULL AND geometry
 	END IF;
 END IF;
 
-FOR r IN 
-    SELECT fgm.cdb_schema, fgm.view_name, fgm.mview_name
-    FROM qgis_pkg.feature_geometry_metadata AS fgm
-    WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.parent_objectclass_id = p_oc_id AND fgm.objectclass_id = oc_id AND fgm.geometry_name = geom_name AND fgm.lod = ql_lod
+FOR r IN
+	EXECUTE format('
+		SELECT fgm.cdb_schema, fgm.view_name, fgm.mview_name
+    	FROM %I.feature_geometry_metadata AS fgm
+    	WHERE fgm.cdb_schema = %L AND fgm.parent_objectclass_id = %L AND fgm.objectclass_id = %L AND fgm.geometry_name = %L AND fgm.lod = %L
+	', qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id, geom_name, ql_lod)
 LOOP
 	IF r.view_name IS NOT NULL THEN
 		view_exists := TRUE;
 	    sql_drop_v := concat('DROP VIEW IF EXISTS ', qi_usr_schema, '.', r.view_name, ';');
 	    EXECUTE sql_drop_v;
 		RAISE NOTICE 'Drop view of % in cdb_schema %', r.view_name, cdb_schema;
-		UPDATE qgis_pkg.feature_geometry_metadata AS fgm
-   		SET 
-	        view_name = NULL
-	    WHERE
-	        fgm.cdb_schema = qi_cdb_schema AND fgm.view_name = r.view_name;
+		EXECUTE format('
+			UPDATE %I.feature_geometry_metadata AS fgm
+			SET view_name = NULL
+			WHERE fgm.cdb_schema = %L AND fgm.view_name = %L;
+		', qi_usr_schema, qi_cdb_schema, r.view_name);
 	END IF;
 	IF r.mview_name IS NOT NULL THEN
 		view_exists := TRUE;
 	    sql_drop_mv := concat('DROP MATERIALIZED VIEW IF EXISTS ', qi_usr_schema, '.', r.mview_name, ';');
 	    EXECUTE sql_drop_mv;
 		RAISE NOTICE 'Drop materialized view of % in cdb_schema %', r.mview_name, cdb_schema;
-		UPDATE qgis_pkg.feature_geometry_metadata AS fgm
+		EXECUTE format('
+		UPDATE %I.feature_geometry_metadata AS fgm
    		SET 
 	        is_matview = FALSE,
 	        mview_name = NULL,
 	        mv_creation_time = NULL,
 	        mv_refresh_time	= NULL,
 	        mv_last_update_time	= NULL
-	    WHERE
-	        fgm.cdb_schema = qi_cdb_schema AND fgm.mview_name = r.mview_name;
+	    WHERE fgm.cdb_schema = %L AND fgm.mview_name = %L;
+		', qi_usr_schema, qi_cdb_schema, r.mview_name);
 	END IF;
 END LOOP;
 
 IF NOT view_exists THEN
-	RAISE EXCEPTION 'The geometry (materialized) view of the % (p_oc_id = %, oc_id = %) in %(LoD_%) does not exist in qgis_pkg_feature_geometry_data table.', target_class, p_oc_id, oc_id, geometry_name, lod;
+	RAISE EXCEPTION 'The geometry (materialized) view of the % (p_oc_id = %, oc_id = %) in %(LoD_%) does not exist in %.feature_geometry_data table.', target_class, p_oc_id, oc_id, geometry_name, lod, qi_usr_schema;
 END IF;
 	
 EXCEPTION
@@ -1161,11 +1175,11 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION qgis_pkg.drop_geometry_view(varchar, varchar, integer, integer, text, varchar) IS 'Drop specified geometry (materialized) views of the given objectclass feature in the schema';
 REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_geometry_view(varchar, varchar, integer, integer, text, varchar) FROM PUBLIC;
 --Example
--- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 901, 709, 'lod2MultiSurface')
--- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 0, 901, 'address')
--- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 0, 901, 'lod1Solid')
--- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 0, 901, 'lod0Solid') -- drop view error test
--- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 0, 903, 'lod0Solid') -- drop view error test
+-- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 901, 709, 'lod2MultiSurface', '2')
+-- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 0, 901, 'address', '0')
+-- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 0, 901, 'lod1Solid', '1')
+-- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 0, 901, 'lod0Solid', '0') -- drop view error test
+-- SELECT * FROM qgis_pkg.drop_geometry_view('qgis_bstsai', 'citydb', 0, 903, 'lod1Solid', '1') -- drop view error test
 
 
 ----------------------------------------------------------------
@@ -1201,8 +1215,8 @@ IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata
 END IF;
 
 -- Check if feature geometry metadata table exists
-IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'qgis_pkg' AND table_name = 'feature_geometry_metadata') THEN
-	RAISE EXCEPTION 'qgis_pkg.feature_geometry_metadata table not yet created. Please create it first';
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+	RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
 END IF;
 
 IF parent_objectclass_id IS NOT NULL AND objectclass_id IS NOT NULL THEN
@@ -1216,11 +1230,13 @@ IF parent_objectclass_id IS NOT NULL AND objectclass_id IS NOT NULL THEN
 		target_class := classname;
 		RAISE NOTICE 'Drop all geometry (materialized) view(s) of % (oc_id = %) in schema %', classname,  oc_id, cdb_schema;
 	END IF;
-	FOR r IN 
-	    SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.geometry_name, fgm.lod
-	    FROM qgis_pkg.feature_geometry_metadata AS fgm
-	    WHERE fgm.cdb_schema = qi_cdb_schema AND fgm.parent_objectclass_id = p_oc_id AND fgm.objectclass_id = oc_id
-			AND (fgm.view_name IS NOT NULL OR fgm.mview_name IS NOT NULL)
+	FOR r IN
+		EXECUTE format('
+			SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.geometry_name, fgm.lod
+			FROM %I.feature_geometry_metadata AS fgm
+			WHERE fgm.cdb_schema = %L AND fgm.parent_objectclass_id = %L AND fgm.objectclass_id = %L
+				AND (fgm.view_name IS NOT NULL OR fgm.mview_name IS NOT NULL)
+		', qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id)
 	LOOP
 		view_exists := TRUE;
 	    PERFORM qgis_pkg.drop_geometry_view(
@@ -1235,9 +1251,11 @@ IF parent_objectclass_id IS NOT NULL AND objectclass_id IS NOT NULL THEN
 ELSE
 	RAISE NOTICE 'Drop all geometry (materialized) view(s) in schema %', cdb_schema;
 	FOR r IN 
-	    SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.geometry_name, fgm.lod
-	    FROM qgis_pkg.feature_geometry_metadata AS fgm
-	    WHERE fgm.cdb_schema = qi_cdb_schema AND NOT (fgm.view_name IS NULL AND fgm.mview_name IS NULL)
+		EXECUTE format('
+			SELECT fgm.cdb_schema, fgm.parent_objectclass_id, fgm.objectclass_id, fgm.geometry_name, fgm.lod
+	    	FROM %I.feature_geometry_metadata AS fgm
+	    	WHERE fgm.cdb_schema = %L AND NOT (fgm.view_name IS NULL AND fgm.mview_name IS NULL)
+		', qi_usr_schema, qi_cdb_schema)
 	LOOP
 		view_exists := TRUE;
 	    PERFORM qgis_pkg.drop_geometry_view(
@@ -1253,10 +1271,10 @@ END IF;
 
 IF NOT view_exists THEN
 	IF NOT (parent_objectclass_id IS NULL AND objectclass_id IS NULL) THEN
-		RAISE NOTICE 'The geometry (materialized) view(s) of % (p_oc_id = % AND oc_id = %) does not exist in qgis_pkg_feature_geometry_data table.', target_class, p_oc_id, oc_id;
+		RAISE EXCEPTION 'The geometry (materialized) view(s) of % (p_oc_id = % AND oc_id = %) does not exist in %_feature_geometry_data table.', target_class, p_oc_id, oc_id, qi_usr_schema;
 		RETURN;
 	ELSE
-		RAISE EXCEPTION 'No geometry (materialized) view(s) exist in qgis_pkg_feature_geometry_data table.';
+		RAISE EXCEPTION 'No geometry (materialized) view(s) exist in %_feature_geometry_data table.', qi_usr_schema;
 	END IF;
 END IF;
 
@@ -1265,7 +1283,7 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION qgis_pkg.drop_all_geometry_views(varchar, varchar, integer, integer) IS 'Drop all available geometry (materialized) views in the specified schema';
 REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_all_geometry_views(varchar, varchar, integer, integer) FROM PUBLIC;
 -- Example
--- SELECT * FROM qgis_pkg.drop_all_geometry_views('qgis_bstsai', 'vienna_v5'); -- drop all v & mv
+-- SELECT * FROM qgis_pkg.drop_all_geometry_views('qgis_bstsai', 'citydb'); -- drop all v & mv
 -- SELECT * FROM qgis_pkg.drop_all_geometry_views('qgis_bstsai', 'citydb', 0, 901); -- drop all v & mv of oc_id = 901
 -- SELECT * FROM qgis_pkg.drop_all_geometry_views('qgis_bstsai', 'citydb', 0, 1301); -- drop all v & mv of oc_id = 1301
 -- SELECT * FROM qgis_pkg.drop_all_geometry_views('qgis_bstsai', 'citydb', 901, 709); -- drop all v & mv of p_oc_id = 901, oc_id = 709
