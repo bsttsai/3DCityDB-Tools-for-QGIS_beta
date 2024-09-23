@@ -57,6 +57,9 @@ IF NOT is_nested THEN
 			AND fam.objectclass_id = %L 
 			AND fam.is_nested = %L)
 	', qi_usr_schema, qi_cdb_schema, oc_id, qi_is_nested) INTO attri_ids;
+	IF ARRAY_LENGTH(attri_ids, 1) = 0 THEN
+		attri_ids := NULL;
+	END IF;
 ELSE
 	attri_type := 'nested';
 	FOR r IN
@@ -884,11 +887,12 @@ FROM ('
 			WHILE sql_attri IS NULL THEN
 			LOOP
 				attri_index := attri_index + 1;
+				attri_id := attribute_ids[attri_index];
 				EXECUTE format('
 				SELECT fam.bbox_type, fam.objectclass_id, fam.parent_attribute_name, fam.attribute_name, fam.is_nested
 				FROM %I.feature_attribute_metadata AS fam
-				WHERE fam.id = %L[%L];
-				', qi_usr_schema, attribute_ids, attri_index) INTO r;
+				WHERE fam.id = %L;
+				', qi_usr_schema, attri_id) INTO r;
 				IF NOT r.is_nested THEN
 					SELECT qgis_pkg.collect_inline_attribute(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.attribute_name, r.bbox_type) INTO sql_attri;
 				ELSE
@@ -981,6 +985,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.create_attris_table_view(varchar, varchar, i
 -- SELECT * FROM qgis_pkg.create_attris_table_view('qgis_bstsai', 'citydb', 901, ARRAY[108,114,110,125], TRUE); -- all manual
 -- SELECT * FROM qgis_pkg.create_attris_table_view('qgis_bstsai', 'citydb', 901, NULL, TRUE, TRUE); -- all automatic
 -- SELECT * FROM qgis_pkg.create_attris_table_view('qgis_bstsai', 'rh_v5', 709, 24, NULL, TRUE, TRUE); -- all automatic
+-- SELECT * FROM qgis_pkg.create_attris_table_view('qgis_bstsai', 'rh', 709, 173, NULL, TRUE, TRUE);
 
 
 ----------------------------------------------------------------
