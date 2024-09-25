@@ -1,2 +1,3 @@
 *.png
 *.json
+.DS_Store
