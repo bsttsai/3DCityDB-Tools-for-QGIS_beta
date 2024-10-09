@@ -1251,7 +1251,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.get_view_column_type(varchar, varchar, varch
 ----------------------------------------------------------------
 -- The function lookup the primary key id of the given attribute
 -- If the attribute is nested, it will return the key id of its first child attribute's id
-DROP FUNCTION IF EXISTS qgis_pkg.get_attribute_key_id(varchar, varchar, varchar, integer, varchar);
+DROP FUNCTION IF EXISTS qgis_pkg.get_attribute_key_id(varchar, varchar, integer, varchar);
 CREATE OR REPLACE FUNCTION qgis_pkg.get_attribute_key_id(
 	usr_schema varchar,
 	cdb_schema varchar,
@@ -1317,6 +1317,85 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.get_attribute_key_id(varchar, varchar, integ
 -- SELECT * FROM qgis_pkg.get_attribute_key_id('qgis_bstsai','citydb', 901, 'name');
 -- SELECT * FROM qgis_pkg.get_attribute_key_id('qgis_bstsai','citydb', 901, 'height');
 -- SELECT * FROM qgis_pkg.get_attribute_key_id('qgis_bstsai','citydb', 901, '土砂災害警戒区域');
+
+
+----------------------------------------------------------------
+-- Create FUNCTION QGIS_PKG.ATTRIBUTE_KEY_ID_TO_NAME()
+----------------------------------------------------------------
+-- The function lookup the attribute name of the given attribute_id
+-- If the attribute is nested, it will return the parent attribute name suffixed with child attribute name (e.g. hight_value, hight_status, etc)
+DROP FUNCTION IF EXISTS qgis_pkg.attribute_key_id_to_name(varchar, varchar, integer, integer);
+CREATE OR REPLACE FUNCTION qgis_pkg.attribute_key_id_to_name(
+	usr_schema varchar,
+	cdb_schema varchar,
+	objectclass_id integer,
+	attribute_id integer
+) RETURNS varchar AS $$
+DECLARE
+	qi_usr_schema varchar := quote_ident(usr_schema);
+	ql_cdb_schema varchar := quote_literal(cdb_schema);
+	oc_id integer := objectclass_id;
+    sql_attri_name text;
+	attri_name varchar;
+
+BEGIN
+
+-- Check if feature attribute metadata table exists
+IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+	RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
+END IF;
+
+-- First check Inline attribute
+sql_attri_name := concat('
+SELECT attribute_name
+FROM ',qi_usr_schema,'.feature_attribute_metadata AS fam
+WHERE fam.cdb_schema = ',ql_cdb_schema,' 
+	AND fam.objectclass_id = ', oc_id,' AND fam.id = ', attribute_id,'
+	AND fam.is_nested IS FALSE;
+');
+
+EXECUTE sql_attri_name INTO attri_name;
+
+IF attri_name IS NULL THEN
+	-- Nested attribute, return the name with parent attribute and child attribute concatenated with '_'
+	sql_attri_name := concat('
+		WITH nested_attri AS (
+			SELECT parent_attribute_name AS p_attri
+			FROM ',qi_usr_schema,'.feature_attribute_metadata
+			WHERE cdb_schema = ', ql_cdb_schema,' AND id = ', attribute_id,'
+		)
+		SELECT array_to_string(
+			ARRAY(
+			SELECT concat(parent_attribute_name, ''_'', attribute_name)
+			FROM ',qi_usr_schema,'.feature_attribute_metadata, nested_attri
+			WHERE cdb_schema = ', ql_cdb_schema,' 
+				AND objectclass_id = ', oc_id,'
+				AND parent_attribute_name = nested_attri.p_attri
+			), '',''
+		)
+	');
+	EXECUTE sql_attri_name INTO attri_name;
+	IF attri_name IS NULL THEN
+		RAISE EXCEPTION 'The given attribute name of objectclass_id % can not be found! Please check if the existence of the attribute in schema %', oc_id, ql_cdb_schema;
+	ELSE
+		RETURN attri_name;
+	END IF;
+ELSE
+	RETURN attri_name;
+END IF;
+
+EXCEPTION
+	WHEN QUERY_CANCELED THEN
+		RAISE EXCEPTION 'qgis_pkg.attribute_key_id_to_name(): Error QUERY_CANCELED';
+	WHEN OTHERS THEN 
+		RAISE EXCEPTION 'qgis_pkg.attribute_key_id_to_name(): %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
+COMMENT ON FUNCTION qgis_pkg.attribute_key_id_to_name(varchar, varchar, integer, integer) IS 'Lookup the attribute name with the given attribute_id. If the attribute is nested, it will return the parent attribute name suffixed with child attribute name (e.g. hight_value, hight_status, etc)';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.attribute_key_id_to_name(varchar, varchar, integer, integer) FROM public;
+--Example
+-- SELECT * FROM qgis_pkg.attribute_key_id_to_name('qgis_bstsai', 'citydb', 502, 1);
+-- SELECT * FROM qgis_pkg.attribute_key_id_to_name('qgis_bstsai', 'citydb', 901, 57);
 
 
 ----------------------------------------------------------------

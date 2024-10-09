@@ -600,12 +600,12 @@ END IF;
 
 -- Determine View or Materialized View
 IF IS_MATVIEW THEN
-	view_type := 'MATERIALIZED VIEW';
+	view_type := 'materialized view';
 	qi_gv_name := concat('"_g_', qi_gv_name, '"');
 	qi_gv_header := qgis_pkg.generate_sql_matview_header(qi_usr_schema, qi_gv_name);
 	qi_gv_footer := qgis_pkg.generate_sql_matview_footer(qi_usr_name, qi_usr_schema, qi_gv_name);
 ELSE
-	view_type := 'VIEW';
+	view_type := 'view';
     qi_gv_name := concat('"', qi_gv_name, '"');
 	qi_gv_header := qgis_pkg.generate_sql_view_header(qi_usr_schema, qi_gv_name);
 END IF;
@@ -652,7 +652,7 @@ IF IS_MATVIEW THEN
 	EXECUTE sql_view;
 	mv_end_time := clock_timestamp();
 	mv_create_time :=  mv_end_time - mv_start_time;
-	RAISE NOTICE '%: "%" creation time: %', view_type, qi_gv_name, mv_create_time;
+	RAISE NOTICE '% % creation time: %', view_type, qi_gv_name, mv_create_time;
 	EXECUTE format('
 		UPDATE %I.feature_geometry_metadata AS fgm
 		SET 

@@ -80,77 +80,77 @@ CREATE TABLE         qgis_pkg.classname_lookup AS
 	SELECT 
 		o.id 				AS oc_id, 
 		o.classname			AS oc_name,
-	CASE o.classname
-		WHEN ''Address''                       THEN ''addr''
-		WHEN ''ClosureSurface''                THEN ''cls_surf''
-		WHEN ''CityModel''                     THEN ''ct_model''
-		WHEN ''ImplicitGeometry''              THEN ''impl_geom''
-		WHEN ''GenericLogicalSpace''           THEN ''gen_log_sp''
-		WHEN ''GenericOccupiedSpace''          THEN ''gen_occ_sp''
-		WHEN ''GenericUnoccupiedSpace''        THEN ''gen_unocc_sp''
-		WHEN ''GenericThematicSurface''        THEN ''gen_them_surf''
-		WHEN ''LandUse''                       THEN ''luse''
-		WHEN ''PointCloud''                    THEN ''pcl''
-		WHEN ''ReliefFeature''                 THEN ''rel_feat''
-		WHEN ''TINRelief''                     THEN ''rel_tin''
-		WHEN ''MassPointRelief''               THEN ''rel_masspt''
-		WHEN ''BreaklineRelief''               THEN ''rel_brkline''
-		WHEN ''RasterRelief''                  THEN ''rel_raster''
-		WHEN ''Railway''                       THEN ''trn_rail''
-		WHEN ''Section''                       THEN ''trn_sec''
-		WHEN ''Waterway''                      THEN ''trn_wat''
-		WHEN ''Intersection''                  THEN ''trn_int''
-		WHEN ''Square''                        THEN ''trn_sq''
-		WHEN ''Track''                         THEN ''trn_trk''
-		WHEN ''Road''                          THEN ''trn_rd''
-		WHEN ''AuxiliaryTrafficSpace''         THEN ''trn_aux_tr_sp''
-		WHEN ''ClearanceSpace''                THEN ''trn_clr_sp''
-		WHEN ''TrafficSpace''                  THEN ''trn_tr_sp''
-		WHEN ''Hole''                          THEN ''trn_hole''
-		WHEN ''AuxiliaryTrafficArea''          THEN ''trn_aux_tr_ar''
-		WHEN ''TrafficArea''                   THEN ''trn_tr_ar''
-		WHEN ''Marking''                       THEN ''trn_mark''
-		WHEN ''HoleSurface''                   THEN ''trn_hl_surf''
-		WHEN ''OtherConstruction''             THEN ''con_other''
-		WHEN ''Door''                          THEN ''door''
-		WHEN ''Window''                        THEN ''wndw''
-		WHEN ''WallSurface''                   THEN ''wall_surf''
-		WHEN ''GroundSurface''                 THEN ''gnd_surf''
-		WHEN ''InteriorWallSurface''           THEN ''int_wall_surf''
-		WHEN ''RoofSurface''                   THEN ''roof_surf''
-		WHEN ''FloorSurface''                  THEN ''flr_surf''
-		WHEN ''OuterFloorSurface''             THEN ''out_flr_surf''
-		WHEN ''CeilingSurface''                THEN ''ceil_surf''
-		WHEN ''OuterCeilingSurface''           THEN ''out_ceil_surf''
-		WHEN ''DoorSurface''                   THEN ''door_surf''
-		WHEN ''WindowSurface''                 THEN ''wndw_surf''
-		WHEN ''Tunnel''                        THEN ''tun''
-		WHEN ''TunnelPart''                    THEN ''tun_part''
-		WHEN ''TunnelConstructiveElement''     THEN ''tun_constr_elem''
-		WHEN ''HollowSpace''                   THEN ''tun_hol_sp''
-		WHEN ''TunnelInstallation''            THEN ''tun_inst''
-		WHEN ''TunnelFurniture''               THEN ''tun_frn''
-		WHEN ''Building''                      THEN ''bdg''
-		WHEN ''BuildingPart''                  THEN ''bdg_part''
-		WHEN ''BuildingConstructiveElement''   THEN ''bdg_constr_elem''
-		WHEN ''BuildingRoom''                  THEN ''bdg_room''
-		WHEN ''BuildingInstallation''          THEN ''bdg_inst''
-		WHEN ''BuildingFurniture''             THEN ''bdg_frn''
-		WHEN ''BuildingUnit''                  THEN ''bdg_unit''
-		WHEN ''Storey''                        THEN ''bdg_storey''
-		WHEN ''Bridge''                        THEN ''bri''
-		WHEN ''BridgePart''                    THEN ''bri_part''
-		WHEN ''BridgeConstructiveElement''     THEN ''bri_constr_elem''
-		WHEN ''BridgeRoom''                    THEN ''bri_room''
-		WHEN ''BridgeInstallation''            THEN ''bri_inst''
-		WHEN ''BridgeFurniture''               THEN ''bri_frn''
-		WHEN ''CityObjectGroup''               THEN ''cityobj_grp''
-		WHEN ''SolitaryVegetationObject''      THEN ''sol_veg_obj''
-		WHEN ''PlantCover''                    THEN ''plant_cov''
-		WHEN ''WaterBody''                     THEN ''wtr_body''
-		WHEN ''WaterSurface''                  THEN ''wtr_surf''
-		WHEN ''WaterGroundSurface''            THEN ''wtr_gnd_surf''
-		WHEN ''CityFurniture''                 THEN ''city_frn''
+		CASE o.classname
+			WHEN ''Address''                       THEN ''addr''
+			WHEN ''ClosureSurface''                THEN ''cls_surf''
+			WHEN ''CityModel''                     THEN ''ct_model''
+			WHEN ''ImplicitGeometry''              THEN ''impl_geom''
+			WHEN ''GenericLogicalSpace''           THEN ''gen_log_sp''
+			WHEN ''GenericOccupiedSpace''          THEN ''gen_occ_sp''
+			WHEN ''GenericUnoccupiedSpace''        THEN ''gen_unocc_sp''
+			WHEN ''GenericThematicSurface''        THEN ''gen_them_surf''
+			WHEN ''LandUse''                       THEN ''luse''
+			WHEN ''PointCloud''                    THEN ''pcl''
+			WHEN ''ReliefFeature''                 THEN ''rel_feat''
+			WHEN ''TINRelief''                     THEN ''rel_tin''
+			WHEN ''MassPointRelief''               THEN ''rel_masspt''
+			WHEN ''BreaklineRelief''               THEN ''rel_brkline''
+			WHEN ''RasterRelief''                  THEN ''rel_raster''
+			WHEN ''Railway''                       THEN ''trn_rail''
+			WHEN ''Section''                       THEN ''trn_sec''
+			WHEN ''Waterway''                      THEN ''trn_wat''
+			WHEN ''Intersection''                  THEN ''trn_int''
+			WHEN ''Square''                        THEN ''trn_sq''
+			WHEN ''Track''                         THEN ''trn_trk''
+			WHEN ''Road''                          THEN ''trn_rd''
+			WHEN ''AuxiliaryTrafficSpace''         THEN ''trn_aux_tr_sp''
+			WHEN ''ClearanceSpace''                THEN ''trn_clr_sp''
+			WHEN ''TrafficSpace''                  THEN ''trn_tr_sp''
+			WHEN ''Hole''                          THEN ''trn_hole''
+			WHEN ''AuxiliaryTrafficArea''          THEN ''trn_aux_tr_ar''
+			WHEN ''TrafficArea''                   THEN ''trn_tr_ar''
+			WHEN ''Marking''                       THEN ''trn_mark''
+			WHEN ''HoleSurface''                   THEN ''trn_hl_surf''
+			WHEN ''OtherConstruction''             THEN ''con_other''
+			WHEN ''Door''                          THEN ''door''
+			WHEN ''Window''                        THEN ''wndw''
+			WHEN ''WallSurface''                   THEN ''wall_surf''
+			WHEN ''GroundSurface''                 THEN ''gnd_surf''
+			WHEN ''InteriorWallSurface''           THEN ''int_wall_surf''
+			WHEN ''RoofSurface''                   THEN ''roof_surf''
+			WHEN ''FloorSurface''                  THEN ''flr_surf''
+			WHEN ''OuterFloorSurface''             THEN ''out_flr_surf''
+			WHEN ''CeilingSurface''                THEN ''ceil_surf''
+			WHEN ''OuterCeilingSurface''           THEN ''out_ceil_surf''
+			WHEN ''DoorSurface''                   THEN ''door_surf''
+			WHEN ''WindowSurface''                 THEN ''wndw_surf''
+			WHEN ''Tunnel''                        THEN ''tun''
+			WHEN ''TunnelPart''                    THEN ''tun_part''
+			WHEN ''TunnelConstructiveElement''     THEN ''tun_constr_elem''
+			WHEN ''HollowSpace''                   THEN ''tun_hol_sp''
+			WHEN ''TunnelInstallation''            THEN ''tun_inst''
+			WHEN ''TunnelFurniture''               THEN ''tun_frn''
+			WHEN ''Building''                      THEN ''bdg''
+			WHEN ''BuildingPart''                  THEN ''bdg_part''
+			WHEN ''BuildingConstructiveElement''   THEN ''bdg_constr_elem''
+			WHEN ''BuildingRoom''                  THEN ''bdg_room''
+			WHEN ''BuildingInstallation''          THEN ''bdg_inst''
+			WHEN ''BuildingFurniture''             THEN ''bdg_frn''
+			WHEN ''BuildingUnit''                  THEN ''bdg_unit''
+			WHEN ''Storey''                        THEN ''bdg_storey''
+			WHEN ''Bridge''                        THEN ''bri''
+			WHEN ''BridgePart''                    THEN ''bri_part''
+			WHEN ''BridgeConstructiveElement''     THEN ''bri_constr_elem''
+			WHEN ''BridgeRoom''                    THEN ''bri_room''
+			WHEN ''BridgeInstallation''            THEN ''bri_inst''
+			WHEN ''BridgeFurniture''               THEN ''bri_frn''
+			WHEN ''CityObjectGroup''               THEN ''cityobj_grp''
+			WHEN ''SolitaryVegetationObject''      THEN ''sol_veg_obj''
+			WHEN ''PlantCover''                    THEN ''plant_cov''
+			WHEN ''WaterBody''                     THEN ''wtr_body''
+			WHEN ''WaterSurface''                  THEN ''wtr_surf''
+			WHEN ''WaterGroundSurface''            THEN ''wtr_gnd_surf''
+			WHEN ''CityFurniture''                 THEN ''city_frn''
 		END AS oc_alias,
 		CASE n.alias 
 			WHEN ''core'' THEN ''Core''
@@ -395,20 +395,28 @@ UNIQUE (cdb_schema, objectclass_id, classname, parent_attribute_name, attribute_
 ------------------------------------------------------------------
 DROP TABLE IF EXISTS qgis_pkg.layer_metadata_template CASCADE;
 CREATE TABLE         qgis_pkg.layer_metadata_template (
-id				bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-cdb_schema		varchar,
-ade_prefix		varchar, -- NULL for standard CityGML, otherwise the prefix used by the selected ADE.
-layer_type		varchar, -- Value in (VectorLayer, DetailView, VectorLayerNoGeom, DetailViewNoGeom)
-feature_type	varchar, -- CityGML package/module name
-root_class		varchar, -- The CityGML top class in the respective CityGML module (Building, Road, ...)
-class			varchar,
-lod				varchar(4), -- value in ('lod0', 'lod1', 'lod2', 'lod3', 'lodx' for no lod)
-layer_name		varchar UNIQUE, -- contains the layer name
-gv_name			varchar,
-av_name			varchar, -- contains the suffix of the detail view (column to be renamed at a later point)
-n_features		integer,
-creation_date	timestamptz(3),
-refresh_date	timestamptz(3)
+id						bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+cdb_schema				varchar,
+-- ade_prefix		varchar, -- NULL for standard CityGML, otherwise the prefix used by the selected ADE.
+-- layer_type		varchar, -- Value in (VectorLayer, DetailView, VectorLayerNoGeom, DetailViewNoGeom)
+feature_type			varchar, -- CityGML package/module name
+-- root_class		varchar, -- The CityGML top class in the respective CityGML module (Building, Road, ...)
+parent_objectclass_id  	integer, -- Null for Space features
+parent_classname		varchar, -- Null for Space features
+objectclass_id  		integer,
+classname				varchar,
+lod						varchar(4), -- value in ('lod0', 'lod1', 'lod2', 'lod3', 'lodx' for no lod)
+layer_name				varchar UNIQUE, -- contains the layer name
+gv_name					varchar,
+inline_attris	varchar[], -- stores the selected inline attribute names by users
+nested_attris	varchar[], -- stores the selected nested attribute names by users
+is_all_attris			boolean, -- indicates whether all exisiting attributes regarding the class are selected
+is_joins				boolean DEFAULT FALSE, -- indicates the approach for layer creation (TRUE for using approach 1 & 2 to have multiple joins)
+av_table_name			varchar, -- stores the integrated attribute table view name, null for using approach 1 & 2 (multiple joins)
+av_join_names			varchar[], -- stores the selected individual attribute view names, null for using the default approach 3 (table)
+n_features				integer,
+creation_date			timestamptz(3)
+-- refresh_date			timestamptz(3)
 -- qml_form		varchar, -- name of the qml file containing QGIS Field and Forms configurations
 -- qml_symb		varchar, -- name of the qml file containing QGIS 2D symbology configuration
 -- qml_3d			varchar,  -- name of the qml file containing QGIS 3D symbology configuration
@@ -418,17 +426,24 @@ refresh_date	timestamptz(3)
 );
 COMMENT ON TABLE qgis_pkg.layer_metadata_template IS 'List of layers and their metadata';
 
-CREATE INDEX lmeta_cdb_schema_idx ON qgis_pkg.layer_metadata_template (cdb_schema);
-CREATE INDEX lmeta_ade_pref_idx   ON qgis_pkg.layer_metadata_template (ade_prefix);
-CREATE INDEX lmeta_l_type_idx     ON qgis_pkg.layer_metadata_template (layer_type);
-CREATE INDEX lmeta_f_type_idx     ON qgis_pkg.layer_metadata_template (feature_type);
-CREATE INDEX lmeta_rclass_idx     ON qgis_pkg.layer_metadata_template (root_class);
-CREATE INDEX lmeta_class_idx      ON qgis_pkg.layer_metadata_template (class);
-CREATE INDEX lmeta_lod_idx        ON qgis_pkg.layer_metadata_template (lod);
-CREATE INDEX lmeta_l_name_idx     ON qgis_pkg.layer_metadata_template (layer_name);
-CREATE INDEX lmeta_gv_name_idx    ON qgis_pkg.layer_metadata_template (gv_name);
-CREATE INDEX lmeta_nf_idx         ON qgis_pkg.layer_metadata_template (n_features);
-CREATE INDEX lmeta_rd_idx         ON qgis_pkg.layer_metadata_template (refresh_date);
+CREATE INDEX lmeta_id_idx 		  		ON qgis_pkg.layer_metadata_template (id);
+CREATE INDEX lmeta_cdb_schema_idx 		ON qgis_pkg.layer_metadata_template (cdb_schema);
+CREATE INDEX lmeta_f_type_idx     		ON qgis_pkg.layer_metadata_template (feature_type);
+CREATE INDEX lmeta_p_oc_id_idx    		ON qgis_pkg.layer_metadata_template (parent_objectclass_id);
+CREATE INDEX lmeta_p_class_idx    		ON qgis_pkg.layer_metadata_template (parent_classname);
+CREATE INDEX lmeta_oc_id_idx      		ON qgis_pkg.layer_metadata_template (objectclass_id);
+CREATE INDEX lmeta_class_idx      		ON qgis_pkg.layer_metadata_template (classname);
+CREATE INDEX lmeta_lod_idx        		ON qgis_pkg.layer_metadata_template (lod);
+CREATE INDEX lmeta_l_name_idx     		ON qgis_pkg.layer_metadata_template (layer_name);
+CREATE INDEX lmeta_gv_name_idx    		ON qgis_pkg.layer_metadata_template (gv_name);
+CREATE INDEX lmeta_i_attri_names_idx    ON qgis_pkg.layer_metadata_template (inline_attris);
+CREATE INDEX lmeta_n_attri_names_idx    ON qgis_pkg.layer_metadata_template (nested_attris);
+CREATE INDEX lmeta_is_all_attris_idx   	ON qgis_pkg.layer_metadata_template (is_all_attris);
+CREATE INDEX lmeta_is_joins_idx   		ON qgis_pkg.layer_metadata_template (is_joins);
+CREATE INDEX lmeta_av_table_name_idx   	ON qgis_pkg.layer_metadata_template (av_table_name);
+CREATE INDEX lmeta_av_join_names_idx   	ON qgis_pkg.layer_metadata_template (av_join_names);
+CREATE INDEX lmeta_nf_idx         		ON qgis_pkg.layer_metadata_template (n_features);
+CREATE INDEX lmeta_cd_idx         		ON qgis_pkg.layer_metadata_template (creation_date);
 
 
 --**************************

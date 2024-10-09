@@ -303,7 +303,7 @@ END IF;
 	
 sql_statement := concat(sql_statement,'
 ALTER TABLE ',qi_usr_schema,'."',qi_lv_name,'" OWNER TO ',qi_usr_name,';
-REFRESH MATERIALIZED VIEW ',qi_usr_schema,'."',qi_lv_name,'"');
+REFRESH MATERIALIZED VIEW ',qi_usr_schema,'."',qi_lv_name,'";');
 RETURN sql_statement;
 
 EXCEPTION
@@ -740,7 +740,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_attris_table_view(
 	is_matview boolean DEFAULT FALSE,
 	is_all_attri boolean DEFAULT FALSE
 )
-RETURNS void
+RETURNS varchar
 AS $$
 DECLARE
 	qi_usr_name varchar	  := (SELECT substring(usr_schema from 'qgis_(.*)') AS usr_name);
@@ -968,6 +968,8 @@ END IF;
 
 EXECUTE sql_atv;
 
+RETURN concat(qi_usr_schema, '.', view_name);
+
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
 		RAISE EXCEPTION 'qgis_pkg.create_attris_table_view(): Error QUERY_CANCELED';
@@ -1005,13 +1007,16 @@ AS $$
 DECLARE
 	qi_usr_name varchar	  := (SELECT substring(usr_schema from 'qgis_(.*)') AS usr_name);
 	qi_usr_schema varchar := quote_ident(usr_schema);
+	ql_usr_schema varchar := quote_literal(usr_schema);
 	qi_cdb_schema varchar := quote_ident(cdb_schema);
+	ql_cdb_schema varchar := quote_literal(cdb_schema);
 	geom_view_name varchar; attri_view_name varchar;
 	view_prefix CONSTANT varchar := '_av_'; matview_prefix CONSTANT varchar := '_amv_';
 	lv_prefix CONSTANT varchar := '=lv'; lmv_prefix CONSTANT varchar := '=lmv';
 	view_col_names text[]; view_col_name text;
 	p_oc_id integer; 
 	oc_id integer; 
+	parent_classname varchar;
 	classname varchar;
 	parent_class_alias varchar; 
 	class_alias varchar;
@@ -1020,12 +1025,28 @@ DECLARE
 	sql_l_select text;
 	sql_l_from text;
 	sql_layer text;
+	sql_feat_count text;
+	sql_ins text;
+	sql_statement text;
 	r RECORD;
 
 	l_name text;
 	qi_lv_header text;
 	qi_lmv_header text;
 	qi_lmv_footer text;
+
+	-- for layer metadata
+	f_type varchar;
+	lod varchar;
+	attri_id integer;
+	attri_ids integer[];
+	is_nested boolean;
+	selected_attri varchar;
+	inline_attri_ids integer[];
+	inline_attris varchar[];
+	nested_attri_ids integer[];
+	nested_attris varchar[];
+	num_features integer;
 	
 BEGIN
 -- Check if usr_schema exists
@@ -1061,11 +1082,16 @@ EXECUTE format('
 p_oc_id 	:= r.parent_objectclass_id;
 oc_id 		:= r.objectclass_id;
 IF p_oc_id <> 0 THEN
-	parent_class_alias := qgis_pkg.objectclass_id_to_alias(p_oc_id);
+	parent_classname	:= qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, p_oc_id);
+	parent_class_alias	:= qgis_pkg.objectclass_id_to_alias(p_oc_id);
+ELSE
+	parent_classname	:= 'null';
 END IF;
 classname 	:= qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id);
 class_alias := qgis_pkg.objectclass_id_to_alias(oc_id);
 g_type 		:= r.geometry_type;
+lod			:= concat('lod', r.lod);
+EXECUTE format('SELECT feature_type FROM qgis_pkg.classname_lookup WHERE oc_id = %L', oc_id) INTO f_type;
 
 -- check if the geometry views have been created, if not first created both geometry view and matview
 IF geom_view_name IS NULL THEN
@@ -1077,6 +1103,12 @@ IF geom_view_name IS NULL THEN
 	PERFORM qgis_pkg.refresh_geometry_materialized_view(qi_usr_schema, qi_cdb_schema, r.parent_objectclass_id, r.objectclass_id, r.geometry_name);
 END IF;
 
+sql_feat_count := concat('
+	SELECT count(f_id) AS n_features
+	FROM ',qi_usr_schema,'.',geom_view_name,';
+');
+
+EXECUTE sql_feat_count INTO num_features;
 
 IF attribute_ids IS NULL AND NOT is_all_attri THEN
 	-- only geometry
@@ -1109,6 +1141,24 @@ IF attribute_ids IS NULL AND NOT is_all_attri THEN
 ELSE
 	-- Create the attribute table view first
 	PERFORM qgis_pkg.create_attris_table_view(qi_usr_schema, qi_cdb_schema, oc_id, geometry_id, attribute_ids, is_matview, is_all_attri);
+	IF is_all_attri THEN
+		inline_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id);
+		nested_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id, TRUE);
+		attri_ids := ARRAY(SELECT unnest(inline_attri_ids || nested_attri_ids) AS id ORDER BY id ASC);
+		attribute_ids := attri_ids;
+	END IF;
+
+	FOREACH attri_id IN ARRAY attribute_ids
+	LOOP
+		selected_attri := qgis_pkg.attribute_key_id_to_name(qi_usr_schema, qi_cdb_schema, oc_id, attri_id);
+		-- Check the given attri_id is nested
+		EXECUTE format('SELECT is_nested FROM %I.feature_attribute_metadata WHERE id = %L', qi_usr_schema, attri_id) INTO is_nested;
+		IF is_nested THEN
+			nested_attris := ARRAY_APPEND(nested_attris, selected_attri);
+		ELSE
+			inline_attris := ARRAY_APPEND(inline_attris, selected_attri);
+		END IF;
+	END LOOP;
 	-- Generate attri_name for later finding the attri_view for joining
 	IF NOT is_matview THEN
 		IF parent_class_alias IS NOT NULL THEN
@@ -1160,9 +1210,25 @@ qi_lmv_footer
 	END IF;
 END IF;
 
-EXECUTE sql_layer;
+-- Prepare layer metadata insertion
+sql_ins := concat(' 
+DELETE FROM ',qi_usr_schema,'.layer_metadata AS l WHERE l.cdb_schema = ',ql_cdb_schema,' AND l.layer_name = ',quote_literal(l_name),';
+INSERT INTO ',qi_usr_schema,'.layer_metadata (
+	cdb_schema, feature_type, parent_objectclass_id, parent_classname, objectclass_id, 
+	classname, lod, layer_name, gv_name, inline_attris, nested_attris, is_all_attris, 
+	av_table_name, n_features, creation_date)
+VALUES (
+	', ql_cdb_schema,',', quote_literal(f_type),',', p_oc_id,',', quote_literal(parent_classname),',', oc_id,',
+	', quote_literal(classname),',', quote_literal(lod),',', quote_literal(l_name),',', quote_literal(geom_view_name),',', quote_literal(inline_attris),',', quote_literal(nested_attris),',', quote_literal(is_all_attri),', 
+	', quote_literal(attri_view_name),',', num_features,', clock_timestamp());
+');
+
+sql_statement := concat(sql_layer, sql_ins);
+
+EXECUTE sql_statement;
 
 RETURN concat(qi_usr_schema, '.', l_name);
+-- RETURN sql_statement;
 	
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
