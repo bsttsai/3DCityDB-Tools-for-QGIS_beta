@@ -1043,9 +1043,9 @@ DECLARE
 	is_nested boolean;
 	selected_attri varchar;
 	inline_attri_ids integer[];
-	inline_attris varchar[];
+	inline_attris varchar[] := '{}';
 	nested_attri_ids integer[];
-	nested_attris varchar[];
+	nested_attris varchar[] := '{}';
 	num_features integer;
 	
 BEGIN
@@ -1267,17 +1267,17 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_layer(
 RETURNS varchar
 AS $$
 DECLARE
-	p_oc_id 				integer 	:= parent_objectclass_id; 
-	oc_id 					integer 	:= objectclass_id;
-	geom					text		:= geometry_name;
-	qi_usr_schema			varchar 	:= quote_ident(usr_schema);
-	qi_cdb_schema 			varchar		:= quote_ident(cdb_schema);
-	geom_id  				integer 	:= qgis_pkg.get_geometry_key_id(qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id, geom, lod);
-	attri text;
-	attri_id integer;
-	attri_ids integer[];
-	sql_layer text;
-	l_name varchar;
+	qi_usr_schema	varchar := quote_ident(usr_schema);
+	qi_cdb_schema 	varchar	:= quote_ident(cdb_schema);
+	p_oc_id 		integer := parent_objectclass_id; 
+	oc_id 			integer := objectclass_id;
+	geom			text	:= geometry_name;
+	geom_id  		integer := qgis_pkg.get_geometry_key_id(qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id, geom, lod);
+	attri 			text;
+	attri_id 		integer;
+	attri_ids 		integer[];
+	sql_layer 		text;
+	l_name 			varchar;
 	
 BEGIN
 -- Prepare the Array of specified attributes

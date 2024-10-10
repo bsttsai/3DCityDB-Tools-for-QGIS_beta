@@ -237,9 +237,9 @@ SELECT
 	g.geometry::geometry(',ql_p_geom_type,',',srid,') AS geom
     --	g.geometry::geometry 	AS geom
 FROM ', qi_cdb_schema,'.feature AS f
-	INNER JOIN ',qi_cdb_schema,'.property AS p ON (f.id = p.feature_id AND p.name = ''boundary'' AND f.objectclass_id = ', p_oc_id,'',sql_where,')
+	INNER JOIN ',qi_cdb_schema,'.property AS p ON (f.id = p.feature_id AND p.name = ''boundary'' AND f.objectclass_id = ', p_oc_id,')
 	INNER JOIN ',qi_cdb_schema,'.feature AS f1 ON f1.id = p.val_feature_id
-	INNER JOIN ',qi_cdb_schema,'.property AS p1 ON (f1.id = p1.feature_id AND f1.objectclass_id = ', oc_id,' AND p1.datatype_id = ',geom_datatype_id,' AND p1.name = ',ql_geom_name,')
+	INNER JOIN ',qi_cdb_schema,'.property AS p1 ON (f1.id = p1.feature_id AND f1.objectclass_id = ', oc_id,' ',sql_where,' AND p1.datatype_id = ',geom_datatype_id,' AND p1.name = ',ql_geom_name,')
 	INNER JOIN ',qi_cdb_schema,'.geometry_data AS g ON (p1.val_geometry_id = g.id AND g.geometry IS NOT NULL);
 -- ORDER BY f1.id ASC;
 ');
@@ -652,7 +652,7 @@ IF IS_MATVIEW THEN
 	EXECUTE sql_view;
 	mv_end_time := clock_timestamp();
 	mv_create_time :=  mv_end_time - mv_start_time;
-	RAISE NOTICE '% % creation time: %', view_type, qi_gv_name, mv_create_time;
+	RAISE NOTICE '% % creation time %', view_type, qi_gv_name, mv_create_time;
 	EXECUTE format('
 		UPDATE %I.feature_geometry_metadata AS fgm
 		SET 
@@ -668,7 +668,7 @@ ELSE
 	EXECUTE sql_view;
 	v_end_time := clock_timestamp();
 	v_creation_time := v_end_time - v_start_time;
-	RAISE NOTICE '%: "%" creation time: %', view_type, qi_gv_name, v_creation_time;
+	RAISE NOTICE '%: % creation time %', view_type, qi_gv_name, v_creation_time;
 	EXECUTE format('
 	UPDATE %I.feature_geometry_metadata AS fgm
     SET view_name = %L
@@ -960,7 +960,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.refresh_geometry_materialized_view(varchar, 
 ----------------------------------------------------------------
 -- Create FUNCTION QGIS_PKG.REFRESH_ALL_GEOMETRY_MATERIALIZED_VIEW()
 ----------------------------------------------------------------
-DROP FUNCTION IF EXISTS qgis_pkg.refresh_all_geometry_materialized_view(varchar, varchar, integer, integer, text);
+DROP FUNCTION IF EXISTS qgis_pkg.refresh_all_geometry_materialized_view(varchar, varchar, integer, integer);
 CREATE OR REPLACE FUNCTION qgis_pkg.refresh_all_geometry_materialized_view(
     usr_schema varchar,
 	cdb_schema varchar,

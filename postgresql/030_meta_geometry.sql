@@ -89,6 +89,7 @@ IF oc_ids IS NOT NULL THEN
 	LOOP
 		-- Boundary feature
 		IF oc_id = ANY(bdr_oc_ids) THEN
+			sql_where := concat(' AND ST_MakeEnvelope(',ST_XMin(cdb_envelope),',',ST_YMin(cdb_envelope),',',ST_XMax(cdb_envelope),',',ST_YMax(cdb_envelope),',',srid,') && f1.envelope ');
 			sql_address_feat := concat('
 			INSERT INTO ',qi_usr_schema,'.feature_geometry_metadata (cdb_schema, bbox_type, parent_objectclass_id, parent_classname, objectclass_id, classname, datatype_id, geometry_name, lod, geometry_type, postgis_geom_type, last_modification_date)
 			SELECT DISTINCT ON (cdb_schema, parent_objectclass_id, parent_classname, objectclass_id, classname, datatype_id, geometry_name, lod, geometry_type, postgis_geom_type)
@@ -106,8 +107,8 @@ IF oc_ids IS NOT NULL THEN
 				''MultiPointZ''																				::text     			AS postgis_geom_type,
 				clock_timestamp()																			::timestamptz(3)  	AS last_modification_date
 			FROM ',qi_cdb_schema,'.feature AS f
-				INNER JOIN ',qi_cdb_schema,'.property AS p ON (f.id = p.feature_id AND p.name = ''boundary''',sql_where,'
-				INNER JOIN ',qi_cdb_schema,'.feature AS f1 ON (f1.id = p.val_feature_id AND f1.objectclass_id = ',oc_id,')
+				INNER JOIN ',qi_cdb_schema,'.property AS p ON (f.id = p.feature_id AND p.name = ''boundary''
+				INNER JOIN ',qi_cdb_schema,'.feature AS f1 ON (f1.id = p.val_feature_id AND f1.objectclass_id = ',oc_id,'',sql_where,')
 				INNER JOIN ',qi_cdb_schema,'.property AS p1 ON f1.id = p1.feature_id
 				INNER JOIN ',qi_cdb_schema,'.address AS a ON p1.val_address_id = a.id
 			WHERE p.name=''address''
@@ -458,7 +459,7 @@ END IF;
 IF ST_SRID(cdb_envelope) IS NULL OR ST_SRID(cdb_envelope) <> srid OR cdb_bbox_type = 'db_schema' THEN
 	sql_where := NULL;
 ELSE
-	sql_where := concat(' AND ST_MakeEnvelope(',ST_XMin(cdb_envelope),',',ST_YMin(cdb_envelope),',',ST_XMax(cdb_envelope),',',ST_YMax(cdb_envelope),',',srid,') && f.envelope ');
+	sql_where := concat(' AND ST_MakeEnvelope(',ST_XMin(cdb_envelope),',',ST_YMin(cdb_envelope),',',ST_XMax(cdb_envelope),',',ST_YMax(cdb_envelope),',',srid,') && f1.envelope ');
 END IF;
 
 -- Get the datatype_id of GeometryProperty
@@ -490,8 +491,8 @@ SELECT DISTINCT ON (cdb_schema, parent_objectclass_id, objectclass_id, datatype_
  	clock_timestamp()																			::timestamptz(3) 	AS last_modification_date
 FROM 
 	',qi_cdb_schema,'.feature AS f
-	INNER JOIN ',qi_cdb_schema,'.property AS p ON f.id = p.feature_id AND p.name = ''boundary''',sql_where,'
-	INNER JOIN ',qi_cdb_schema,'.feature AS f1 ON f1.id = p.val_feature_id AND f1.objectclass_id = ',objectclass_id,'
+	INNER JOIN ',qi_cdb_schema,'.property AS p ON f.id = p.feature_id AND p.name = ''boundary''
+	INNER JOIN ',qi_cdb_schema,'.feature AS f1 ON f1.id = p.val_feature_id AND f1.objectclass_id = ',objectclass_id,'',sql_where,'
 	INNER JOIN ',qi_cdb_schema,'.property AS p1 ON f1.id = p1.feature_id AND p1.datatype_id = ',geom_datatype_id,' 
 ON CONFLICT (cdb_schema, parent_objectclass_id, objectclass_id, datatype_id, geometry_name, lod, geometry_type, postgis_geom_type)
 DO UPDATE

@@ -15,6 +15,7 @@
 -- qgis_pkg.get_view_column_name()
 -- qgis_pkg.get_view_column_type()
 -- qgis_pkg.get_attribute_key_id()
+-- qgis_pkg.attribute_key_id_to_name()
 -- qgis_pkg.generate_sql_attribute_matview_footer()
 -- qgis_pkg.create_attribute_view()
 -- qgis_pkg.create_all_attribute_view_in_schema()
