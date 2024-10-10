@@ -740,7 +740,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_attris_table_view(
 	is_matview boolean DEFAULT FALSE,
 	is_all_attri boolean DEFAULT FALSE
 )
-RETURNS varchar
+RETURNS integer[]
 AS $$
 DECLARE
 	qi_usr_name varchar	  := (SELECT substring(usr_schema from 'qgis_(.*)') AS usr_name);
@@ -778,6 +778,7 @@ DECLARE
 	inline_attri_ids integer[];
 	nested_attri_ids integer[];
 	attri_ids integer[] := attribute_ids;
+	v_attri_ids integer[]; -- valid attributes
 BEGIN
 -- Check if usr_schema exists
 IF qi_usr_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata AS i WHERE i.schema_name::varchar = qi_usr_schema) THEN
@@ -826,7 +827,9 @@ IF attri_ids IS NOT NULL THEN
 		SELECT qgis_pkg.collect_nested_attribute(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.parent_attribute_name, r.bbox_type) INTO sql_attri;
 	END IF;
 
+	-- In case the scanned attribute has no valid entries (the sql_attri will be null in this case)
 	IF sql_attri IS NOT NULL THEN
+	v_attri_ids := ARRAY_APPEND(v_attri_ids, attri_id);
 	-- Check if composite type exist in attribute query
 	-- If true, separate the ct_type_header and the rest of the query for later adding the view creation header
 	ct_type_header := (SELECT (REGEXP_MATCH(sql_attri, '(DROP TYPE IF EXISTS .*?;[\n\s]*CREATE TYPE .*?;)'))[1]);
@@ -871,7 +874,7 @@ FROM ('
 		-- FOR i IN 2..num_attri
 		WHILE attri_index <= num_attri THEN
 		LOOP
-			attri_id := attribute_ids[attri_index];
+			attri_id := attribute_ids[attri_index]; -- start with 2
 			EXECUTE format('
 			SELECT fam.bbox_type, fam.objectclass_id, fam.parent_attribute_name, fam.attribute_name, fam.is_nested
 			FROM %I.feature_attribute_metadata AS fam
@@ -898,8 +901,8 @@ FROM ('
 				ELSE
 					SELECT qgis_pkg.collect_nested_attribute(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.parent_attribute_name, r.bbox_type) INTO sql_attri;
 				END IF;
-				-- attri_count := attri_count + 1;
 			END LOOP;
+			v_attri_ids := ARRAY_APPEND(v_attri_ids, attri_id);
 			-- Check if composite type exist in attribute query
 			-- If true, separate the ct_type_header and the rest of the query for later adding the view creation header
 			ct_type_header := (SELECT (REGEXP_MATCH(sql_attri, '(DROP TYPE IF EXISTS .*?;[\n\s]*CREATE TYPE .*?;)'))[1]);
@@ -964,11 +967,13 @@ sql_atv_select := concat(sql_atv_select,
 ALTER TABLE ',qi_usr_schema,'.',view_name,' OWNER TO ',qi_usr_name,';
 REFRESH MATERIALIZED VIEW ', qi_usr_schema, '.', view_name);
 	END IF;
+ELSE
+	RAISE EXCEPTION 'No attribute found to create attribute table.';
 END IF;
 
 EXECUTE sql_atv;
 
-RETURN concat(qi_usr_schema, '.', view_name);
+RETURN v_attri_ids;
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
@@ -987,7 +992,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.create_attris_table_view(varchar, varchar, i
 -- SELECT * FROM qgis_pkg.create_attris_table_view('qgis_bstsai', 'citydb', 901, ARRAY[108,114,110,125], TRUE); -- all manual
 -- SELECT * FROM qgis_pkg.create_attris_table_view('qgis_bstsai', 'citydb', 901, NULL, TRUE, TRUE); -- all automatic
 -- SELECT * FROM qgis_pkg.create_attris_table_view('qgis_bstsai', 'rh_v5', 709, 24, NULL, TRUE, TRUE); -- all automatic
--- SELECT * FROM qgis_pkg.create_attris_table_view('qgis_bstsai', 'rh', 709, 173, NULL, TRUE, TRUE);
+-- SELECT * FROM qgis_pkg.create_attris_table_view('qgis_bstsai', 'rh', 709, 4, NULL, TRUE, TRUE); -- rh, 709 wall: direction invalid values check
 
 
 ----------------------------------------------------------------
@@ -1140,15 +1145,9 @@ IF attribute_ids IS NULL AND NOT is_all_attri THEN
 	END IF;
 ELSE
 	-- Create the attribute table view first
-	PERFORM qgis_pkg.create_attris_table_view(qi_usr_schema, qi_cdb_schema, oc_id, geometry_id, attribute_ids, is_matview, is_all_attri);
-	IF is_all_attri THEN
-		inline_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id);
-		nested_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id, TRUE);
-		attri_ids := ARRAY(SELECT unnest(inline_attri_ids || nested_attri_ids) AS id ORDER BY id ASC);
-		attribute_ids := attri_ids;
-	END IF;
+	SELECT qgis_pkg.create_attris_table_view(qi_usr_schema, qi_cdb_schema, oc_id, geometry_id, attribute_ids, is_matview, is_all_attri) INTO attri_ids;
 
-	FOREACH attri_id IN ARRAY attribute_ids
+	FOREACH attri_id IN ARRAY attri_ids
 	LOOP
 		selected_attri := qgis_pkg.attribute_key_id_to_name(qi_usr_schema, qi_cdb_schema, oc_id, attri_id);
 		-- Check the given attri_id is nested
@@ -1291,15 +1290,12 @@ END IF;
 
 -- Determine which method for layer creation
 IF NOT is_joins THEN
-	PERFORM qgis_pkg.create_layer_attri_table(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri);
-	l_name := qgis_pkg.create_layer_attri_table(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri);
+	SELECT qgis_pkg.create_layer_attri_table(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri) INTO l_name;
 ELSE
 	IF is_all_attri THEN
-		PERFORM qgis_pkg.create_layer_multiple_joins_all_attri(qi_usr_schema, qi_cdb_schema, geom_id, oc_id, is_matview);
-		l_name := qgis_pkg.create_layer_multiple_joins_all_attri(qi_usr_schema, qi_cdb_schema, geom_id, oc_id, is_matview);
+		SELECT qgis_pkg.create_layer_multiple_joins_all_attri(qi_usr_schema, qi_cdb_schema, geom_id, oc_id, is_matview) INTO l_name;
 	ELSE
-		PERFORM qgis_pkg.create_layer_multiple_joins(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri);
-		l_name := qgis_pkg.create_layer_multiple_joins(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri);
+		SELECT qgis_pkg.create_layer_multiple_joins(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri) INTO l_name;
 	END IF;
 END IF;
 
