@@ -406,10 +406,11 @@ parent_classname		varchar, -- Null for Space features
 objectclass_id  		integer,
 classname				varchar,
 lod						varchar(4), -- value in ('lod0', 'lod1', 'lod2', 'lod3', 'lodx' for no lod)
+geometry_type			varchar,
 layer_name				varchar UNIQUE, -- contains the layer name
 gv_name					varchar,
-inline_attris	varchar[], -- stores the selected inline attribute names by users
-nested_attris	varchar[], -- stores the selected nested attribute names by users
+inline_attris			varchar[], -- stores the selected inline attribute names by users
+nested_attris			varchar[], -- stores the selected nested attribute names by users
 is_all_attris			boolean, -- indicates whether all exisiting attributes regarding the class are selected
 is_joins				boolean DEFAULT FALSE, -- indicates the approach for layer creation (TRUE for using approach 1 & 2 to have multiple joins)
 av_table_name			varchar, -- stores the integrated attribute table view name, null for using approach 1 & 2 (multiple joins)
@@ -434,6 +435,7 @@ CREATE INDEX lmeta_p_class_idx    		ON qgis_pkg.layer_metadata_template (parent_
 CREATE INDEX lmeta_oc_id_idx      		ON qgis_pkg.layer_metadata_template (objectclass_id);
 CREATE INDEX lmeta_class_idx      		ON qgis_pkg.layer_metadata_template (classname);
 CREATE INDEX lmeta_lod_idx        		ON qgis_pkg.layer_metadata_template (lod);
+CREATE INDEX lmeta_g_type_idx        	ON qgis_pkg.layer_metadata_template (geometry_type);
 CREATE INDEX lmeta_l_name_idx     		ON qgis_pkg.layer_metadata_template (layer_name);
 CREATE INDEX lmeta_gv_name_idx    		ON qgis_pkg.layer_metadata_template (gv_name);
 CREATE INDEX lmeta_i_attri_names_idx    ON qgis_pkg.layer_metadata_template (inline_attris);

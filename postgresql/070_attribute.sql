@@ -398,15 +398,15 @@ IF attri_val_cols IS NOT NULL THEN
 	FOREACH attri_val_col IN ARRAY attri_val_cols
 	LOOP
 		IF val_col_count = 1 THEN
-	sql_attri := concat(sql_attri,'
-		p.',attri_val_col,' AS "',attribute_name,'",');
+			sql_attri := concat(sql_attri,'
+				p.',attri_val_col,' AS "',attribute_name,'",');
 		ELSE
 			IF attri_val_col = 'val_uom' THEN
-	sql_attri := concat(sql_attri,'
-		p.',attri_val_col,' AS "',attribute_name,'_', 'UoM', '",');
+			sql_attri := concat(sql_attri,'
+				p.',attri_val_col,' AS "',attribute_name,'_', 'UoM', '",');
 			ELSE 
-	sql_attri := concat(sql_attri,'
-		p.',attri_val_col,' AS "',attribute_name,'_',SUBSTRING(attri_val_col FROM 'val_(.*)'),'",'); -- INITCAP
+			sql_attri := concat(sql_attri,'
+				p.',attri_val_col,' AS "',attribute_name,'_',SUBSTRING(attri_val_col FROM 'val_(.*)'),'",'); -- INITCAP
 			END IF;
 		END IF;
 		val_col_count := val_col_count + 1;
@@ -526,16 +526,16 @@ IF qi_n_val_cols > 1 THEN
 		LOOP
 			-- only the first val_col will be named as the attribute name
 			IF val_col_count = 1 THEN 
-sql_attri := concat(sql_attri,'
-	(',attribute_name,'_', iter_count::text,').',attri_val_col,' AS "',attribute_name,'_',iter_count::text,'",');
+				sql_attri := concat(sql_attri,'
+					(',attribute_name,'_', iter_count::text,').',attri_val_col,' AS "',attribute_name,'_',iter_count::text,'",');
 			-- the rest val_cols will be named without the 'val_' prefix, like column 'val_codespace' will be renamed as 'codespace'
 			ELSE
 				IF attri_val_col = 'val_uom' THEN
-sql_attri := concat(sql_attri,'
-	(',attribute_name,'_', iter_count::text,').',attri_val_col,' AS "',attribute_name,'_UoM', '_', iter_count::text, '",');
+				sql_attri := concat(sql_attri,'
+					(',attribute_name,'_', iter_count::text,').',attri_val_col,' AS "',attribute_name,'_UoM', '_', iter_count::text, '",');
 				ELSE 
-sql_attri := concat(sql_attri,'
-	(',attribute_name,'_', iter_count::text,').',attri_val_col,' AS "',attribute_name, '_', SUBSTRING(attri_val_col FROM 'val_(.*)'),'_', iter_count::text, '",'); -- INITCAP
+				sql_attri := concat(sql_attri,'
+					(',attribute_name,'_', iter_count::text,').',attri_val_col,' AS "',attribute_name, '_', SUBSTRING(attri_val_col FROM 'val_(.*)'),'_', iter_count::text, '",'); -- INITCAP
 				END IF;
 			END IF;
 			val_col_count := val_col_count + 1; 
@@ -561,19 +561,19 @@ sql_attri := concat(sql_attri,'
 	END LOOP;
 	sql_ctb_header := LEFT(sql_ctb_header, LENGTH(sql_ctb_header) - 1);
 	
-sql_attri = concat(sql_ct_type_def, LEFT(sql_attri, LENGTH(sql_attri) - 1), '
-FROM CROSSTAB(
-	$BODY$
-	SELECT 
-		f.id AS f_id, 
-		p.name,
-		',sql_ctb_val_col,'
-	FROM ',qi_cdb_schema,'.feature AS f
-		INNER JOIN ',qi_cdb_schema,'.property AS p ON (f.id = p.feature_id AND f.objectclass_id = ',objectclass_id,'',sql_where,')
-	WHERE p.name = ',quote_literal(attribute_name),'
-	ORDER BY f_id, p.id ASC 
-	$BODY$)
-	AS ct',sql_ctb_header,')');
+	sql_attri = concat(sql_ct_type_def, LEFT(sql_attri, LENGTH(sql_attri) - 1), '
+	FROM CROSSTAB(
+		$BODY$
+		SELECT 
+			f.id AS f_id, 
+			p.name,
+			',sql_ctb_val_col,'
+		FROM ',qi_cdb_schema,'.feature AS f
+			INNER JOIN ',qi_cdb_schema,'.property AS p ON (f.id = p.feature_id AND f.objectclass_id = ',objectclass_id,'',sql_where,')
+		WHERE p.name = ',quote_literal(attribute_name),'
+		ORDER BY f_id, p.id ASC 
+		$BODY$)
+		AS ct',sql_ctb_header,')');
 
 -- One value columns	
 ELSE
@@ -583,26 +583,26 @@ ELSE
 	WHILE iter_count <= max_multiplicity 
 	LOOP
 		-- Concatenate additional column names with increasing numbers
-sql_attri := concat(sql_attri, '
-	ct.',attribute_name,'_', iter_count::text,' AS ', attribute_name,'_',iter_count::text,',');
-		sql_ctb_header := concat(sql_ctb_header,'"',attribute_name,'_', iter_count::text,'" ', attri_val_col_type,',');
-		iter_count = iter_count + 1;
-	END LOOP;
-	sql_ctb_header = LEFT(sql_ctb_header, LENGTH(sql_ctb_header) - 1);	-- Remove the end comma
+	sql_attri := concat(sql_attri, '
+		ct.',attribute_name,'_', iter_count::text,' AS ', attribute_name,'_',iter_count::text,',');
+			sql_ctb_header := concat(sql_ctb_header,'"',attribute_name,'_', iter_count::text,'" ', attri_val_col_type,',');
+			iter_count = iter_count + 1;
+		END LOOP;
+		sql_ctb_header = LEFT(sql_ctb_header, LENGTH(sql_ctb_header) - 1);	-- Remove the end comma
 	
-sql_attri := concat(LEFT(sql_attri, LENGTH(sql_attri) - 1),'
-FROM CROSSTAB(
-	$BODY$
-	SELECT 
-		f.id AS f_id, 
-		p.name,
-		',attri_val_cols[1],'
-	FROM ',qi_cdb_schema,'.feature AS f
-		INNER JOIN ',qi_cdb_schema,'.property AS p ON (f.id = p.feature_id AND f.objectclass_id = ',objectclass_id,'',sql_where,')
-	WHERE p.name = ',quote_literal(attribute_name),'
-	ORDER BY f_id, p.id ASC 
-	$BODY$)
-	AS ct' ,sql_ctb_header,')');
+	sql_attri := concat(LEFT(sql_attri, LENGTH(sql_attri) - 1),'
+	FROM CROSSTAB(
+		$BODY$
+		SELECT 
+			f.id AS f_id, 
+			p.name,
+			',attri_val_cols[1],'
+		FROM ',qi_cdb_schema,'.feature AS f
+			INNER JOIN ',qi_cdb_schema,'.property AS p ON (f.id = p.feature_id AND f.objectclass_id = ',objectclass_id,'',sql_where,')
+		WHERE p.name = ',quote_literal(attribute_name),'
+		ORDER BY f_id, p.id ASC 
+		$BODY$)
+		AS ct' ,sql_ctb_header,')');
 END IF;
 
 -- Update the is_multiple_value_columns, n_value_columns, value_columns and ct_type_name if there are multiple val_cols
@@ -789,24 +789,24 @@ qi_n_val_cols := ARRAY_LENGTH(attri_val_cols, 1);
 		LOOP
 			-- only the first val_col will be named as the attribute name
 			IF val_col_count = 1 THEN
-sql_attri := concat(sql_attri,'
-	MAX(CASE WHEN p1.name = ', quote_literal(attri_name),' THEN p1.', attri_val_col,' END) AS "', parent_attribute_name, '_', attri_name, '",');
+				sql_attri := concat(sql_attri,'
+					MAX(CASE WHEN p1.name = ', quote_literal(attri_name),' THEN p1.', attri_val_col,' END) AS "', parent_attribute_name, '_', attri_name, '",');
 			-- the rest val_cols will be named without the 'val_' prefix, like column 'val_codespace' will be renamed as 'Codespace'
 			ELSE
 				IF attri_val_col = 'val_uom' THEN
-sql_attri := concat(sql_attri,'
-	MAX(CASE WHEN p1.name = ', quote_literal(attri_name),' THEN p1.', attri_val_col,' END) AS "', parent_attribute_name, '_', attri_name, '_UoM",');
+					sql_attri := concat(sql_attri,'
+						MAX(CASE WHEN p1.name = ', quote_literal(attri_name),' THEN p1.', attri_val_col,' END) AS "', parent_attribute_name, '_', attri_name, '_UoM",');
 				ELSE
-sql_attri := concat(sql_attri,'
-	MAX(CASE WHEN p1.name = ', quote_literal(attri_name),' THEN p1.', attri_val_col,' END) AS "', parent_attribute_name, '_', attri_name, '_', SUBSTRING(attri_val_col FROM 'val_(.*)'),'",'); -- INITCAP
+					sql_attri := concat(sql_attri,'
+						MAX(CASE WHEN p1.name = ', quote_literal(attri_name),' THEN p1.', attri_val_col,' END) AS "', parent_attribute_name, '_', attri_name, '_', SUBSTRING(attri_val_col FROM 'val_(.*)'),'",'); -- INITCAP
 				END IF;
 			END IF;
 			val_col_count := val_col_count + 1; 
 		END LOOP;
 		val_col_count := 1;
 	ELSE
-sql_attri := concat(sql_attri,'
-	MAX(CASE WHEN p1.name = ', quote_literal(attri_name),' THEN p1.', attri_val_cols[1],' END) AS "', parent_attribute_name, '_', attri_name, '",');
+	sql_attri := concat(sql_attri,'
+		MAX(CASE WHEN p1.name = ', quote_literal(attri_name),' THEN p1.', attri_val_cols[1],' END) AS "', parent_attribute_name, '_', attri_name, '",');
 	END IF;
     
     -- Update the is_multiple_value_columns, n_value_columns, value_columns
@@ -982,15 +982,15 @@ IF (attri_val_cols_nested IS NOT NULL AND ARRAY_LENGTH(attri_val_cols_nested,1) 
 			LOOP
 				-- only the first val_col will be named as the attribute name
 				IF val_col_count = 1 THEN
-sql_attri := concat(sql_attri, '
-	(', attri_name, '_', iter_count::text, ').', attri_val_col, ' AS "', parent_attribute_name, '_', attri_name, '_', iter_count::text, '",');
+						sql_attri := concat(sql_attri, '
+							(', attri_name, '_', iter_count::text, ').', attri_val_col, ' AS "', parent_attribute_name, '_', attri_name, '_', iter_count::text, '",');
 				ELSE 
 					IF attri_val_col = 'val_uom' THEN
-sql_attri := concat(sql_attri, '
-	(', attri_name, '_', iter_count::text, ').', attri_val_col, ' AS "', parent_attribute_name, '_', attri_name, '_UoM_', iter_count, '",');
+						sql_attri := concat(sql_attri, '
+							(', attri_name, '_', iter_count::text, ').', attri_val_col, ' AS "', parent_attribute_name, '_', attri_name, '_UoM_', iter_count, '",');
 					ELSE
-sql_attri := concat(sql_attri, '
-	(', attri_name, '_', iter_count::text, ').', attri_val_col, ' AS "', parent_attribute_name, '_', attri_name, '_', SUBSTRING(attri_val_col FROM 'val_(.*)'),'_',iter_count, '",'); -- INITCAP
+						sql_attri := concat(sql_attri, '
+							(', attri_name, '_', iter_count::text, ').', attri_val_col, ' AS "', parent_attribute_name, '_', attri_name, '_', SUBSTRING(attri_val_col FROM 'val_(.*)'),'_',iter_count, '",'); -- INITCAP
 					END IF;
 				END IF;
 				val_col_count := val_col_count +1;
@@ -1016,15 +1016,15 @@ ELSIF (attri_val_cols_nested IS NOT NULL AND ARRAY_LENGTH(attri_val_cols_nested,
 			LOOP
 				-- only the first val_col will be named as the attribute name
 				IF val_col_count = 1 THEN
-sql_attri := concat(sql_attri, '
-	', attri_name, '_', iter_count::text, ' AS "', parent_attribute_name, '_', attri_name, '_', iter_count::text, '",');
+						sql_attri := concat(sql_attri, '
+							', attri_name, '_', iter_count::text, ' AS "', parent_attribute_name, '_', attri_name, '_', iter_count::text, '",');
 				ELSE 
 					IF attri_val_col = 'val_uom' THEN
-sql_attri := concat(sql_attri, '
-	', attri_name, '_', iter_count::text, ' AS "', parent_attribute_name, '_', attri_name, '_UoM_', iter_count, '",');
+						sql_attri := concat(sql_attri, '
+							', attri_name, '_', iter_count::text, ' AS "', parent_attribute_name, '_', attri_name, '_UoM_', iter_count, '",');
 					ELSE
-sql_attri := concat(sql_attri, '
-	', attri_name, '_', iter_count::text, ' AS "', parent_attribute_name, '_', attri_name, '_', SUBSTRING(attri_val_col FROM 'val_(.*)'),'_',iter_count, '",'); -- INITCAP
+						sql_attri := concat(sql_attri, '
+							', attri_name, '_', iter_count::text, ' AS "', parent_attribute_name, '_', attri_name, '_', SUBSTRING(attri_val_col FROM 'val_(.*)'),'_',iter_count, '",'); -- INITCAP
 					END IF;
 				END IF;
 				val_col_count := val_col_count +1;

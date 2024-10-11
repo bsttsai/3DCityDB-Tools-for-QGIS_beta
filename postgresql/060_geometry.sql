@@ -678,6 +678,16 @@ ELSE
 	', qi_usr_schema, qi_gv_name, qi_cdb_schema, p_oc_id, oc_id, ql_geom_name, ql_lod);
 END IF;
 
+
+/* Drop geometry materialized view (before creation) cascades to related layer
+   Delete entries from table layer_metadata and reset sequence (if possible) */
+EXECUTE format('
+DELETE FROM %I.layer_metadata AS l WHERE l.cdb_schema = %L AND l.gv_name = %L;
+WITH m AS (SELECT max(id) AS max_id FROM %I.layer_metadata)
+SELECT setval(''%I.layer_metadata_id_seq''::regclass, m.max_id, TRUE) FROM m;',
+qi_usr_schema, qi_cdb_schema, qi_gv_name,
+qi_usr_schema, qi_usr_schema);
+
 RETURN concat(qi_usr_schema, '.', qi_gv_name);
 
 EXCEPTION
@@ -1134,7 +1144,7 @@ FOR r IN
 LOOP
 	IF r.view_name IS NOT NULL THEN
 		view_exists := TRUE;
-	    sql_drop_v := concat('DROP VIEW IF EXISTS ', qi_usr_schema, '.', r.view_name, ';');
+	    sql_drop_v := concat('DROP VIEW IF EXISTS ', qi_usr_schema, '.', r.view_name, ' CASCADE;');
 	    EXECUTE sql_drop_v;
 		RAISE NOTICE 'Drop view of % in cdb_schema %', r.view_name, cdb_schema;
 		EXECUTE format('
@@ -1145,7 +1155,7 @@ LOOP
 	END IF;
 	IF r.mview_name IS NOT NULL THEN
 		view_exists := TRUE;
-	    sql_drop_mv := concat('DROP MATERIALIZED VIEW IF EXISTS ', qi_usr_schema, '.', r.mview_name, ';');
+	    sql_drop_mv := concat('DROP MATERIALIZED VIEW IF EXISTS ', qi_usr_schema, '.', r.mview_name, ' CASCADE;');
 	    EXECUTE sql_drop_mv;
 		RAISE NOTICE 'Drop materialized view of % in cdb_schema %', r.mview_name, cdb_schema;
 		EXECUTE format('
@@ -1158,6 +1168,15 @@ LOOP
 	        mv_last_update_time	= NULL
 	    WHERE fgm.cdb_schema = %L AND fgm.mview_name = %L;
 		', qi_usr_schema, qi_cdb_schema, r.mview_name);
+
+		/* Drop geometry materialized view cascades to related layer
+		   Delete entries from table layer_metadata and reset sequence (if possible) */
+		EXECUTE format('
+		DELETE FROM %I.layer_metadata AS l WHERE l.cdb_schema = %L AND l.gv_name = %L;
+		WITH m AS (SELECT max(id) AS max_id FROM %I.layer_metadata)
+		SELECT setval(''%I.layer_metadata_id_seq''::regclass, m.max_id, TRUE) FROM m;',
+		qi_usr_schema, qi_cdb_schema, r.mview_name,
+		qi_usr_schema, qi_usr_schema);
 	END IF;
 END LOOP;
 
