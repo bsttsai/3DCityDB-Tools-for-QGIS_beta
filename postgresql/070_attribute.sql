@@ -1475,7 +1475,7 @@ DECLARE
 	qi_attri_name varchar := attribute_name;
 	qi_usr_name varchar := (SELECT substring(usr_schema from 'qgis_(.*)') AS usr_name);
 	qi_oc_id integer := objectclass_id;
-	qi_layer_name varchar;
+	qi_view_name varchar;
 	cdb_bbox_type_array CONSTANT varchar[]:= ARRAY['db_schema', 'm_view', 'qgis'];
 	ct_type_name varchar;
 	check_ct_type_name varchar;
@@ -1520,7 +1520,7 @@ IF NOT is_nested THEN
 	IF NOT inline_exist THEN
 		RAISE EXCEPTION 'Inline attribute "%" does not exist in schema % (extent type: %). Please scan and check it first in the %.feature_attribute_metadata table!', attribute_name, cdb_schema, cdb_bbox_type, usr_schema;
 	ELSE
-		qi_layer_name := concat('i_', objectclass_id, '_', attribute_name);
+		qi_view_name := concat('i_', objectclass_id, '_', attribute_name);
 		EXECUTE format('SELECT qgis_pkg.collect_inline_attribute(%L, %L, %s, %L, %L);', qi_usr_schema, qi_cdb_schema, objectclass_id, attribute_name, cdb_bbox_type) INTO sql_attri;
 	END IF;
 ELSE
@@ -1533,7 +1533,7 @@ ELSE
 	IF NOT nested_exist THEN
 		RAISE EXCEPTION 'Nested attribute "%" does not exist in schema % (extent type: %). Please scan and check it first in the %.feature_attribute_metadata table!', attribute_name, cdb_schema, cdb_bbox_type, usr_schema;
 	ELSE
-		qi_layer_name := concat('n_', objectclass_id, '_', attribute_name);
+		qi_view_name := concat('n_', objectclass_id, '_', attribute_name);
 		EXECUTE format('SELECT qgis_pkg.collect_nested_attribute(%L, %L, %s, %L, %L);', qi_usr_schema, qi_cdb_schema, objectclass_id, attribute_name, cdb_bbox_type) INTO sql_attri;
 	END IF;
 END IF;
@@ -1550,9 +1550,9 @@ check_ct_type_name := trim(both '"' from ct_type_name);
 -- Determine view or materialized view
 -- Add view prefix: av-> feature attribute view; amv -> feature attribute materialized view
 IF NOT is_matview THEN
-	qi_layer_name := concat('"', qi_cdb_schema, '_av_', qi_layer_name, '"');
+	qi_view_name := concat('"', qi_cdb_schema, '_av_', qi_view_name, '"');
 	-- Generate view header
-	EXECUTE format('SELECT qgis_pkg.generate_sql_view_header(%L, %L)', qi_usr_schema, qi_layer_name) INTO sql_view_header;
+	EXECUTE format('SELECT qgis_pkg.generate_sql_view_header(%L, %L)', qi_usr_schema, qi_view_name) INTO sql_view_header;
 	--Check if ct_type already existed
 	IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = check_ct_type_name) THEN
 		sql_view := concat(ct_type_header, sql_view_header, sql_attri, ';');
@@ -1560,9 +1560,9 @@ IF NOT is_matview THEN
 		sql_view := concat(sql_view_header, sql_attri, ';');
 	END IF;
 ELSE
-	qi_layer_name := concat('"', qi_cdb_schema, '_amv_', qi_layer_name, '"');
+	qi_view_name := concat('"', qi_cdb_schema, '_amv_', qi_view_name, '"');
 	-- Generate materialized view header
-	EXECUTE format('SELECT qgis_pkg.generate_sql_matview_header(%L, %L)', qi_usr_schema, qi_layer_name) INTO sql_view_header;
+	EXECUTE format('SELECT qgis_pkg.generate_sql_matview_header(%L, %L)', qi_usr_schema, qi_view_name) INTO sql_view_header;
 	-- Generate materialized view footer (should create index based on the columns)
 	-- Check if ct_type already existed
 	IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = check_ct_type_name) THEN
@@ -1588,7 +1588,7 @@ IF sql_attri IS NOT NULL THEN
 			WHERE fam.cdb_schema = %L 
 				AND fam.objectclass_id = %L 
 				AND fam.attribute_name = %L;
-			', qi_usr_schema, qi_layer_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
+			', qi_usr_schema, qi_view_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		ELSE
 			-- Update the view_name, creation_date
 			EXECUTE format('
@@ -1599,12 +1599,12 @@ IF sql_attri IS NOT NULL THEN
 			WHERE fam.cdb_schema = %L 
 				AND fam.objectclass_id = %L 
 				AND fam.parent_attribute_name = %L;
-			', qi_usr_schema, qi_layer_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
+			', qi_usr_schema, qi_view_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		END IF;
 	ELSE
 		IF NOT is_nested THEN
 			-- Generate attribute mv footer
-			EXECUTE format('SELECT qgis_pkg.generate_sql_attribute_matview_footer(%L, %L, %L, %L, %L, %L)',qi_usr_name, usr_schema, qi_layer_name, qi_cdb_schema, objectclass_id, attribute_name) INTO sql_mv_footer;
+			EXECUTE format('SELECT qgis_pkg.generate_sql_attribute_matview_footer(%L, %L, %L, %L, %L, %L)',qi_usr_name, usr_schema, qi_view_name, qi_cdb_schema, objectclass_id, attribute_name) INTO sql_mv_footer;
 			EXECUTE sql_mv_footer;
 			-- Update the mview_name, creation_date
 			EXECUTE format('
@@ -1615,11 +1615,11 @@ IF sql_attri IS NOT NULL THEN
 			WHERE fam.cdb_schema = %L 
 				AND fam.objectclass_id = %L 
 				AND fam.attribute_name = %L;
-			', qi_usr_schema, qi_layer_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
+			', qi_usr_schema, qi_view_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		ELSE
 			-- Update the mview_name, mv_refresh_date
 			-- Generate attribute mv footer
-			EXECUTE format('SELECT qgis_pkg.generate_sql_attribute_matview_footer(%L, %L, %L, %L, %L, %L)',qi_usr_name, usr_schema, qi_layer_name, qi_cdb_schema, objectclass_id, attribute_name) INTO sql_mv_footer;
+			EXECUTE format('SELECT qgis_pkg.generate_sql_attribute_matview_footer(%L, %L, %L, %L, %L, %L)',qi_usr_name, usr_schema, qi_view_name, qi_cdb_schema, objectclass_id, attribute_name) INTO sql_mv_footer;
 			EXECUTE sql_mv_footer;
 			-- Update the mview_name, creation_date
 			EXECUTE format('
@@ -1630,14 +1630,14 @@ IF sql_attri IS NOT NULL THEN
 			WHERE fam.cdb_schema = %L 
 				AND fam.objectclass_id = %L 
 				AND fam.parent_attribute_name = %L;
-			', qi_usr_schema, qi_layer_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
+			', qi_usr_schema, qi_view_name, qi_cdb_schema, qi_oc_id, qi_attri_name);
 		END IF;
 	END IF;
 ELSE
 	RAISE EXCEPTION 'The sql_attri is null. Please check the existence of attribute values in schema %', cdb_schema;
 END IF;
 
-RETURN concat(qi_usr_schema, '.', qi_layer_name);
+RETURN qi_view_name;
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN

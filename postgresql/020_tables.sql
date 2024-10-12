@@ -411,6 +411,7 @@ layer_name				varchar UNIQUE, -- contains the layer name
 gv_name					varchar,
 inline_attris			varchar[], -- stores the selected inline attribute names by users
 nested_attris			varchar[], -- stores the selected nested attribute names by users
+is_matview				boolean, -- indicates whether the generated layer is stored as view or matview
 is_all_attris			boolean, -- indicates whether all exisiting attributes regarding the class are selected
 is_joins				boolean DEFAULT FALSE, -- indicates the approach for layer creation (TRUE for using approach 1 & 2 to have multiple joins)
 av_table_name			varchar, -- stores the integrated attribute table view name, null for using approach 1 & 2 (multiple joins)
@@ -440,6 +441,7 @@ CREATE INDEX lmeta_l_name_idx     		ON qgis_pkg.layer_metadata_template (layer_n
 CREATE INDEX lmeta_gv_name_idx    		ON qgis_pkg.layer_metadata_template (gv_name);
 CREATE INDEX lmeta_i_attri_names_idx    ON qgis_pkg.layer_metadata_template (inline_attris);
 CREATE INDEX lmeta_n_attri_names_idx    ON qgis_pkg.layer_metadata_template (nested_attris);
+CREATE INDEX lmeta_is_matview_idx   	ON qgis_pkg.layer_metadata_template (is_matview);
 CREATE INDEX lmeta_is_all_attris_idx   	ON qgis_pkg.layer_metadata_template (is_all_attris);
 CREATE INDEX lmeta_is_joins_idx   		ON qgis_pkg.layer_metadata_template (is_joins);
 CREATE INDEX lmeta_av_table_name_idx   	ON qgis_pkg.layer_metadata_template (av_table_name);
