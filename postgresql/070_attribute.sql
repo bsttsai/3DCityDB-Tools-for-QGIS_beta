@@ -1297,7 +1297,7 @@ IF attri_id IS NULL THEN
 	');
 	EXECUTE sql_attri_id INTO attri_id;
 	IF attri_id IS NULL THEN
-		RAISE EXCEPTION 'The attribute % of objectclass_id % can not be found! Please check if the existence of the attribute in schema %', ql_attri_name, oc_id, ql_cdb_schema;
+		RAISE EXCEPTION 'The attribute % of objectclass_id % cannot be found! Please check if the existence of the attribute in schema %', ql_attri_name, oc_id, ql_cdb_schema;
 	ELSE
 		RETURN attri_id;
 	END IF;
@@ -1359,25 +1359,32 @@ EXECUTE sql_attri_name INTO attri_name;
 
 IF attri_name IS NULL THEN
 	-- Nested attribute, return the name with parent attribute and child attribute concatenated with '_'
+	-- sql_attri_name := concat('
+	-- 	WITH nested_attri AS (
+	-- 		SELECT parent_attribute_name AS p_attri
+	-- 		FROM ',qi_usr_schema,'.feature_attribute_metadata
+	-- 		WHERE cdb_schema = ', ql_cdb_schema,' AND id = ', attribute_id,'
+	-- 	)
+	-- 	SELECT array_to_string(
+	-- 		ARRAY(
+	-- 		SELECT concat(parent_attribute_name, ''_'', attribute_name)
+	-- 		FROM ',qi_usr_schema,'.feature_attribute_metadata, nested_attri
+	-- 		WHERE cdb_schema = ', ql_cdb_schema,' 
+	-- 			AND objectclass_id = ', oc_id,'
+	-- 			AND parent_attribute_name = nested_attri.p_attri
+	-- 		), '',''
+	-- 	)
+	-- ');
+
+	-- Only return the parent attribute names
 	sql_attri_name := concat('
-		WITH nested_attri AS (
-			SELECT parent_attribute_name AS p_attri
-			FROM ',qi_usr_schema,'.feature_attribute_metadata
-			WHERE cdb_schema = ', ql_cdb_schema,' AND id = ', attribute_id,'
-		)
-		SELECT array_to_string(
-			ARRAY(
-			SELECT concat(parent_attribute_name, ''_'', attribute_name)
-			FROM ',qi_usr_schema,'.feature_attribute_metadata, nested_attri
-			WHERE cdb_schema = ', ql_cdb_schema,' 
-				AND objectclass_id = ', oc_id,'
-				AND parent_attribute_name = nested_attri.p_attri
-			), '',''
-		)
+		SELECT parent_attribute_name AS p_attri
+		FROM ',qi_usr_schema,'.feature_attribute_metadata
+		WHERE cdb_schema = ', ql_cdb_schema,' AND id = ', attribute_id,'
 	');
 	EXECUTE sql_attri_name INTO attri_name;
 	IF attri_name IS NULL THEN
-		RAISE EXCEPTION 'The given attribute name of objectclass_id % can not be found! Please check if the existence of the attribute in schema %', oc_id, ql_cdb_schema;
+		RAISE EXCEPTION 'The given attribute name of objectclass_id % cannot be found! Please check if the existence of the attribute in schema %', oc_id, ql_cdb_schema;
 	ELSE
 		RETURN attri_name;
 	END IF;
@@ -1785,11 +1792,6 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION qgis_pkg.create_all_attribute_view_in_schema(varchar, varchar, integer, boolean, varchar) IS 'Create all attribute view(s) or materialized view(s) of the objectclass within given schema';
 REVOKE EXECUTE ON FUNCTION qgis_pkg.create_all_attribute_view_in_schema(varchar, varchar, integer, boolean, varchar) FROM public;
 --Example
--- usr_schema varchar,
--- cdb_schema varchar,
--- objectclass_id integer DEFAULT NULL,
--- is_matview boolean DEFAULT FALSE,
--- cdb_bbox_type varchar DEFAULT 'db_schema'
 -- SELECT * FROM qgis_pkg.create_all_attribute_view_in_schema('qgis_bstsai', 'citydb', 901);
 -- SELECT * FROM qgis_pkg.create_all_attribute_view_in_schema('qgis_bstsai', 'citydb', 901, TRUE);
 -- SELECT * FROM qgis_pkg.create_all_attribute_view_in_schema('qgis_bstsai', 'citydb');
