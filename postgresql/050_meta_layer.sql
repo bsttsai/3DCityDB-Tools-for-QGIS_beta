@@ -2,7 +2,7 @@
 --
 -- qgis_pkg.generate_layer_name_attri_joins()
 -- qgis_pkg.generate_layer_name_attri_table()
--- qgis_pkg.drop_layer()
+-- qgis_pkg.drop_single_layer()
 
 
 ----------------------------------------------------------------
@@ -15,7 +15,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.generate_layer_name_attri_joins(
 	geometry_id integer,
 	attribute_ids integer[] DEFAULT NULL,
 	is_matview boolean DEFAULT FALSE,
-	is_all_attri boolean DEFAULT FALSE
+	is_all_attris boolean DEFAULT FALSE
 ) 
 RETURNS varchar 
 AS $$
@@ -68,7 +68,7 @@ g_type := r.geometry_type;
 lod := concat('lod', r.lod);
 
 -- If all attributes are requested and not provided, retrieve them
-IF is_all_attri AND attribute_ids IS NULL THEN
+IF is_all_attris AND attribute_ids IS NULL THEN
 	inline_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id);
 	nested_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id, TRUE);
 	attribute_ids := ARRAY(SELECT unnest(inline_attri_ids || nested_attri_ids) ORDER BY 1);
@@ -88,7 +88,7 @@ IF attribute_ids IS NOT NULL THEN
 	
 	-- Update attribute address based on classified attributes
 	attri_address := CASE
-		WHEN is_all_attri THEN '_all_attri_joins'
+		WHEN is_all_attris THEN '_all_attri_joins'
 		ELSE
 			concat(
 				CASE WHEN array_length(inline_attri_ids, 1) > 0 THEN concat(inline_prefix, ARRAY_LENGTH(inline_attri_ids, 1), '}') ELSE '' END,
@@ -135,7 +135,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.generate_layer_name_attri_table(
 	geometry_id integer,
 	attribute_ids integer[] DEFAULT NULL,
 	is_matview boolean DEFAULT FALSE,
-	is_all_attri boolean DEFAULT FALSE
+	is_all_attris boolean DEFAULT FALSE
 ) 
 RETURNS varchar 
 AS $$
@@ -143,7 +143,7 @@ DECLARE
 	qi_usr_schema		varchar := quote_ident(usr_schema);
 	qi_cdb_schema 		varchar	:= quote_ident(cdb_schema);
 	prefix 				varchar := (CASE WHEN is_matview THEN '=lmv' ELSE '=lv' END);
-	attr_suffix 		varchar := (CASE WHEN attribute_ids IS NULL AND NOT is_all_attri THEN '_no_attri_table' ELSE '_attri_table' END);
+	attr_suffix 		varchar := (CASE WHEN attribute_ids IS NULL AND NOT is_all_attris THEN '_no_attri_table' ELSE '_attri_table' END);
 	g_id 				integer := geometry_id;
 	p_oc_id 			integer; 
 	oc_id 				integer; 
@@ -215,10 +215,10 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.generate_layer_name_attri_table(varchar, var
 
 
 ----------------------------------------------------------------
--- Create FUNCTION QGIS_PKG.DROP_SINGLE_LAYER
+-- Create FUNCTION QGIS_PKG.DROP_SINGLE_LAYER_ATTRI_JOINS
 ----------------------------------------------------------------
-DROP FUNCTION IF EXISTS qgis_pkg.drop_single_layer(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) CASCADE;
-CREATE OR REPLACE FUNCTION qgis_pkg.drop_single_layer(
+DROP FUNCTION IF EXISTS qgis_pkg.drop_single_layer_attri_joins(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) CASCADE;
+CREATE OR REPLACE FUNCTION qgis_pkg.drop_single_layer_attri_joins(
 	usr_schema varchar,
 	cdb_schema varchar,
 	parent_objectclass_id integer,
@@ -227,8 +227,8 @@ CREATE OR REPLACE FUNCTION qgis_pkg.drop_single_layer(
 	lod integer,
 	attris text[] DEFAULT NULL,
 	is_matview boolean DEFAULT FALSE,
-	is_all_attri boolean DEFAULT FALSE,
-	is_joins boolean DEFAULT FALSE
+	is_all_attris boolean DEFAULT FALSE,
+	is_drop_attris boolean DEFAULT FALSE
 ) 
 RETURNS varchar 
 AS $$
@@ -246,6 +246,8 @@ DECLARE
 	attri_ids 		integer[];
 	l_name			varchar;
 	sql_drop 		text;
+	r				RECORD;
+	found_record	boolean := FALSE; -- Flag to track if any records were found
 
 BEGIN
 -- Check if cdb_schema exists
@@ -254,7 +256,7 @@ IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata
 END IF;
 
 -- Prepare the Array of specified attributes
-IF attris IS NOT NULL AND NOT is_all_attri THEN
+IF attris IS NOT NULL AND NOT is_all_attris THEN
 	FOREACH attri IN ARRAY attris
 	LOOP
 		attri_id := qgis_pkg.get_attribute_key_id(qi_usr_schema, qi_cdb_schema, oc_id, attri);
@@ -263,36 +265,63 @@ IF attris IS NOT NULL AND NOT is_all_attri THEN
 END IF;
 
 -- Generate the target layer name
-IF is_joins THEN
-	SELECT qgis_pkg.generate_layer_name_attri_joins(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri) INTO l_name;
-ELSE
-	SELECT qgis_pkg.generate_layer_name_attri_table(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri) INTO l_name;
+SELECT qgis_pkg.generate_layer_name_attri_joins(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attris) INTO l_name;
+
+FOR r IN
+	EXECUTE format('
+	SELECT layer_name, inline_attris, nested_attris
+	FROM %I.layer_metadata AS l 
+	WHERE l.cdb_schema = %L 
+		AND l.parent_objectclass_id %s AND l.objectclass_id = %L AND l.layer_name = %L
+		AND l.is_matview = %L AND l.is_joins IS TRUE;
+	',qi_usr_schema, qi_cdb_schema, CASE WHEN p_oc_id <> 0 THEN concat('=',p_oc_id) ELSE 'IS NULL' END, oc_id, l_name, is_matview)
+LOOP
+	found_record := TRUE;
+	sql_drop := concat('
+	DROP ', view_type,' IF EXISTS ',qi_usr_schema,'.', r.layer_name,' CASCADE;
+	DELETE FROM ',qi_usr_schema,'.layer_metadata AS l WHERE l.cdb_schema = ',ql_cdb_schema,' AND l.layer_name = ',quote_literal(r.layer_name),';
+	WITH m AS (SELECT max(id) AS max_id FROM ',qi_usr_schema,'.layer_metadata)
+	SELECT setval(''',qi_usr_schema,'.layer_metadata_id_seq''::regclass, m.max_id, TRUE) FROM m;
+	');
+	EXECUTE sql_drop;
+	IF is_drop_attris THEN
+		IF ARRAY_LENGTH(r.inline_attris, 1) > 0 THEN
+			FOREACH attri IN ARRAY(r.inline_attris)
+			LOOP
+				PERFORM qgis_pkg.drop_attribute_view(qi_usr_schema, qi_cdb_schema, oc_id, attri, FALSE, is_matview);
+			END LOOP;
+		END IF;
+		IF ARRAY_LENGTH(r.nested_attris, 1) > 0 THEN
+			FOREACH attri IN ARRAY(r.nested_attris)
+			LOOP
+				PERFORM qgis_pkg.drop_attribute_view(qi_usr_schema, qi_cdb_schema, oc_id, attri, TRUE, is_matview);
+			END LOOP;
+		END IF;
+	END IF;
+END LOOP;
+
+-- If no records were found, raise an exception
+IF NOT found_record THEN
+	RAISE EXCEPTION 'layers % not found in the %.layer_metadata', l_name, qi_usr_schema;
 END IF;
-
-sql_drop := concat('
-DROP ', view_type,' IF EXISTS ',qi_usr_schema,'.', l_name,' CASCADE;
-DELETE FROM ',qi_usr_schema,'.layer_metadata AS l WHERE l.cdb_schema = ',ql_cdb_schema,' AND l.layer_name = ',quote_literal(l_name),';
-WITH m AS (SELECT max(id) AS max_id FROM ',qi_usr_schema,'.layer_metadata)
-SELECT setval(''',qi_usr_schema,'.layer_metadata_id_seq''::regclass, m.max_id, TRUE) FROM m;
-');
-
-EXECUTE sql_drop;
 
 RETURN concat(qi_usr_schema, '.', l_name);
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
-		RAISE EXCEPTION 'qgis_pkg.drop_single_layer(): Error QUERY_CANCELED';
+		RAISE EXCEPTION 'qgis_pkg.drop_single_layer_attri_joins(): Error QUERY_CANCELED';
  	WHEN OTHERS THEN
-		RAISE EXCEPTION 'qgis_pkg.drop_single_layer(): %', SQLERRM;
+		RAISE EXCEPTION 'qgis_pkg.drop_single_layer_attri_joins(): %', SQLERRM;
 END;
 $$ LANGUAGE plpgsql;
-COMMENT ON FUNCTION qgis_pkg.drop_single_layer(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) IS 'Drop individual layer with the specified geometry and attributes from the cdb_schema';
-REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_single_layer(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) FROM PUBLIC;
+COMMENT ON FUNCTION qgis_pkg.drop_single_layer_attri_joins(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) IS 'Drop individual layer generated using apporach 1 & 2 with the specified geometry and attributes from the cdb_schema. Selectable to cascade dropping the associated attribute (materialized) view(s)';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_single_layer_attri_joins(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) FROM PUBLIC;
 -- Example
--- SELECT * FROM qgis_pkg.drop_single_layer('qgis_bstsai', 'alderaan', NULL, 901, 'lod1Solid', 1, ARRAY['description','height'], FALSE, FALSE, TRUE);
--- SELECT * FROM qgis_pkg.drop_single_layer('qgis_bstsai', 'alderaan', NULL, 901, 'lod1Solid', 1, ARRAY['name','description','height'], TRUE, FALSE, TRUE);
--- SELECT * FROM qgis_pkg.drop_single_layer('qgis_bstsai', 'rh', NULL, 901, 'lod0MultiSurface', 0, NULL, TRUE, TRUE);
+-- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'alderaan', 0, 901, 'lod1Solid', 1, ARRAY['name','description','height'], TRUE, FALSE, TRUE); -- MATVIEW g+ selected a (JOIN)
+-- SELECT * FROM qgis_pkg.drop_single_layer_attri_joins('qgis_bstsai', 'alderaan', NULL, 901, 'lod1Solid', 1, ARRAY['name','description','height'], TRUE, FALSE); -- only drop matview layer
+-- SELECT * FROM qgis_pkg.drop_single_layer_attri_joins('qgis_bstsai', 'alderaan', NULL, 901, 'lod1Solid', 1, ARRAY['name','description','height'], TRUE, FALSE, TRUE); -- drop matview layer & attribute views
+-- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'alderaan', 0, 901, 'lod1Solid', 1, NULL, TRUE, TRUE, TRUE); -- MATVIEW g+ ALL a (JOIN)
+-- SELECT * FROM qgis_pkg.drop_single_layer_attri_joins('qgis_bstsai', 'alderaan', NULL, 901, 'lod1Solid', 1, NULL, TRUE, TRUE, TRUE); -- drop matview layer & attribute views
 
 
 ----------------------------------------------------------------
@@ -319,6 +348,7 @@ DECLARE
 	oc_id 				integer := objectclass_id;
 	class_name			varchar := (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id));
 	view_type			varchar	:= (CASE WHEN is_matview THEN 'MATERIALIZED VIEW' ELSE 'VIEW' END);
+	attri_suffix		varchar := (CASE WHEN is_drop_attris THEN ',drop cascade to attributes' ELSE NULL END);
 	l_names				varchar[];
 	l_name				varchar;
 	inline_attris		varchar[];
@@ -328,13 +358,20 @@ DECLARE
 	sql_drop 			text;
 	sql_del				text;
 	sql_statement		text;
-	result 				text;
+	result_text 		text;
 	r 					RECORD;
+	found_record		boolean := FALSE; -- Flag to track if any records were found
 
 BEGIN
 -- Check if cdb_schema exists
 IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata AS i WHERE i.schema_name::varchar = qi_cdb_schema) THEN
 	RAISE EXCEPTION 'cdb_schema (%) not found. It must be an existing schema', qi_cdb_schema;
+END IF;
+
+IF parent_classname IS NOT NULL THEN
+	result_text := concat(qi_cdb_schema,',', p_oc_id,'(', parent_classname,')', ',', oc_id, '(', class_name,'),', LOWER(view_type), attri_suffix);
+ELSE
+	result_text := concat(qi_cdb_schema,',', oc_id, '(', class_name,'),', LOWER(view_type), attri_suffix);
 END IF;
 
 -- Get all existing layer names based on the target classes from the target cdb_schema
@@ -347,6 +384,8 @@ FOR r IN
 		AND l.is_matview = %L AND l.is_joins IS TRUE;
 	', qi_usr_schema, qi_cdb_schema, CASE WHEN p_oc_id IS NOT NULL THEN concat('=',p_oc_id) ELSE 'IS NULL' END, oc_id, is_matview)
 LOOP
+	found_record := TRUE; -- Set the flag to TRUE if the loop runs, indicating a record was found
+	
 	sql_drop	:= concat('DROP ', view_type,' IF EXISTS ', qi_usr_schema,'.', r.layer_name, ' CASCADE;');
 	sql_del 	:= concat('
 	DELETE FROM ',qi_usr_schema,'.layer_metadata AS l WHERE l.cdb_schema = ',ql_cdb_schema,' AND l.layer_name = ',quote_literal(r.layer_name),';
@@ -372,13 +411,12 @@ LOOP
 	END IF;
 END LOOP;
 
-IF parent_classname IS NOT NULL THEN
-	result := concat('cdb_schema: ', qi_cdb_schema,', parent_class: ', p_oc_id,'(', parent_classname,')', ', class: ', oc_id, '(', class_name,')');
-ELSE
-	result := concat('cdb_schema: ', qi_cdb_schema,', class: ', oc_id, '(', class_name,')');
+-- If no records were found, raise an exception
+IF NOT found_record THEN
+	RAISE EXCEPTION 'No layers found for the given conditions: %', result_text;
 END IF;
 
-RETURN result;
+RETURN result_text;
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
@@ -400,3 +438,273 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_class_layers_attri_joins(varchar, varch
 -- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'alderaan', 0, 901, 'lod1Solid', 1, NULL, TRUE, TRUE, TRUE); -- ALL a (JOIN)
 -- SELECT * FROM qgis_pkg.drop_class_layers_attri_joins('qgis_bstsai', 'alderaan', NULL, 901, TRUE); -- only drop layer matview
 -- SELECT * FROM qgis_pkg.drop_class_layers_attri_joins('qgis_bstsai', 'alderaan', NULL, 901, TRUE, TRUE); -- drop layer matview and associated attribute views
+
+
+----------------------------------------------------------------
+-- Create FUNCTION QGIS_PKG.DROP_SINGLE_LAYER_ATTRI_TABLE
+----------------------------------------------------------------
+DROP FUNCTION IF EXISTS qgis_pkg.drop_single_layer_attri_table(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) CASCADE;
+CREATE OR REPLACE FUNCTION qgis_pkg.drop_single_layer_attri_table(
+	usr_schema varchar,
+	cdb_schema varchar,
+	parent_objectclass_id integer,
+	objectclass_id integer,
+	geometry_name text,
+	lod integer,
+	attris text[] DEFAULT NULL,
+	is_matview boolean DEFAULT FALSE,
+	is_all_attris boolean DEFAULT FALSE,
+	is_drop_attris boolean DEFAULT FALSE
+) 
+RETURNS varchar 
+AS $$
+DECLARE
+	qi_usr_schema	varchar := quote_ident(usr_schema);
+	qi_cdb_schema 	varchar	:= quote_ident(cdb_schema);
+	ql_cdb_schema 	varchar	:= quote_literal(cdb_schema);
+	p_oc_id 		integer := (CASE WHEN parent_objectclass_id IS NULL THEN 0 ELSE parent_objectclass_id END); 
+	oc_id 			integer := objectclass_id;
+	geom			text	:= geometry_name;
+	geom_id  		integer := qgis_pkg.get_geometry_key_id(qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id, geom, lod);
+	view_type		varchar	:= (CASE WHEN is_matview THEN 'MATERIALIZED VIEW' ELSE 'VIEW' END);
+	attri 			text;
+	attri_id 		integer;
+	attri_ids 		integer[];
+	l_name			varchar;
+	sql_drop 		text;
+	r				RECORD;
+	found_record	boolean := FALSE; -- Flag to track if any records were found
+
+BEGIN
+-- Check if cdb_schema exists
+IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata AS i WHERE i.schema_name::varchar = qi_cdb_schema) THEN
+	RAISE EXCEPTION 'cdb_schema (%) not found. It must be an existing schema', qi_cdb_schema;
+END IF;
+
+-- Prepare the Array of specified attributes
+IF attris IS NOT NULL AND NOT is_all_attris THEN
+	FOREACH attri IN ARRAY attris
+	LOOP
+		attri_id := qgis_pkg.get_attribute_key_id(qi_usr_schema, qi_cdb_schema, oc_id, attri);
+		attri_ids := ARRAY_APPEND(attri_ids, attri_id);
+	END LOOP;
+END IF;
+
+-- Generate the target layer name
+SELECT qgis_pkg.generate_layer_name_attri_table(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attris) INTO l_name;
+
+FOR r IN
+	EXECUTE format('
+	SELECT layer_name, av_table_name
+	FROM %I.layer_metadata AS l 
+	WHERE l.cdb_schema = %L 
+		AND l.parent_objectclass_id %s AND l.objectclass_id = %L AND l.layer_name = %L
+		AND l.is_matview = %L AND l.is_joins IS FALSE;
+	',qi_usr_schema, qi_cdb_schema, CASE WHEN p_oc_id <> 0 THEN concat('=',p_oc_id) ELSE 'IS NULL' END, oc_id, l_name, is_matview)
+LOOP
+	found_record := TRUE;
+	sql_drop := concat('
+	DROP ', view_type,' IF EXISTS ',qi_usr_schema,'.', r.layer_name,' CASCADE;
+	DELETE FROM ',qi_usr_schema,'.layer_metadata AS l WHERE l.cdb_schema = ',ql_cdb_schema,' AND l.layer_name = ',quote_literal(r.layer_name),';
+	WITH m AS (SELECT max(id) AS max_id FROM ',qi_usr_schema,'.layer_metadata)
+	SELECT setval(''',qi_usr_schema,'.layer_metadata_id_seq''::regclass, m.max_id, TRUE) FROM m;
+	');
+	EXECUTE sql_drop;
+	IF is_drop_attris THEN
+		sql_drop := concat('DROP ', view_type,' IF EXISTS ', qi_usr_schema,'.', r.av_table_name, ' CASCADE;');
+		EXECUTE sql_drop;
+	END IF;
+END LOOP;
+
+-- If no records were found, raise an exception
+IF NOT found_record THEN
+	RAISE EXCEPTION 'layers % not found in the %.layer_metadata', l_name, qi_usr_schema;
+END IF;
+
+RETURN concat(qi_usr_schema, '.', l_name);
+
+EXCEPTION
+	WHEN QUERY_CANCELED THEN
+		RAISE EXCEPTION 'qgis_pkg.drop_single_layer_attri_table(): Error QUERY_CANCELED';
+ 	WHEN OTHERS THEN
+		RAISE EXCEPTION 'qgis_pkg.drop_single_layer_attri_table(): %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
+COMMENT ON FUNCTION qgis_pkg.drop_single_layer_attri_table(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) IS 'Drop individual layer generated using apporach 3 with the specified geometry and attributes from the cdb_schema. Selectable to cascade dropping the associated integrated attribute table (materialized) view';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_single_layer_attri_table(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) FROM PUBLIC;
+-- Example
+-- VIEW
+-- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'alderaan', 0, 901, 'lod1Solid', 1, NULL, FALSE, TRUE); -- VIEW g+ ALL a (TABLE)
+-- SELECT * FROM qgis_pkg.drop_single_layer_attri_table('qgis_bstsai', 'alderaan', NULL, 901, 'lod1Solid', 1, NULL, FALSE, TRUE, TRUE); -- drop view layer & integrated attribute view
+-- MATVIEW
+-- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'alderaan', 0, 901, 'lod1Solid', 1, ARRAY['name','description','height'], TRUE, FALSE); -- MATVIEW g+ selected a (TABLE)
+-- SELECT * FROM qgis_pkg.drop_single_layer_attri_table('qgis_bstsai', 'alderaan', NULL, 901, 'lod1Solid', 1, ARRAY['name','description','height'], TRUE, FALSE, TRUE); -- drop view layer & integrated attribute matview
+
+
+----------------------------------------------------------------
+-- Create FUNCTION QGIS_PKG.DROP_CLASS_LAYERS_ATTRI_TABLE
+----------------------------------------------------------------
+-- Batch dropping layers generated using approach 3 based on objectclass_id from specified schema. Selectable to cascade dropping the associated integrated attribute table (materialized) view(s)
+DROP FUNCTION IF EXISTS qgis_pkg.drop_class_layers_attri_table(varchar, varchar, integer, integer, boolean, boolean) CASCADE;
+CREATE OR REPLACE FUNCTION qgis_pkg.drop_class_layers_attri_table(
+	usr_schema varchar,
+	cdb_schema varchar,
+	parent_objectclass_id integer,
+	objectclass_id integer,
+	is_matview boolean DEFAULT FALSE,
+	is_drop_attris boolean DEFAULT FALSE
+) 
+RETURNS varchar 
+AS $$
+DECLARE
+	qi_usr_schema		varchar := quote_ident(usr_schema);
+	qi_cdb_schema 		varchar	:= quote_ident(cdb_schema);
+	ql_cdb_schema 		varchar	:= quote_literal(cdb_schema);
+	p_oc_id 			integer := parent_objectclass_id;
+	parent_classname	varchar := (CASE WHEN p_oc_id IS NOT NULL THEN (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, p_oc_id)) ELSE NULL END);
+	oc_id 				integer := objectclass_id;
+	class_name			varchar := (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id));
+	view_type			varchar	:= (CASE WHEN is_matview THEN 'MATERIALIZED VIEW' ELSE 'VIEW' END);
+	attri_suffix		varchar := (CASE WHEN is_drop_attris THEN ',drop cascade to attributes' ELSE NULL END);
+	l_names				varchar[];
+	l_name				varchar;
+	inline_attris		varchar[];
+	nested_attris		varchar[];
+	selected_attri 		varchar;
+	aview_name			varchar;
+	sql_drop 			text;
+	sql_del				text;
+	sql_statement		text;
+	result_text 		text;
+	r 					RECORD;
+	found_record		boolean := FALSE; -- Flag to track if any records were found
+
+BEGIN
+-- Check if cdb_schema exists
+IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata AS i WHERE i.schema_name::varchar = qi_cdb_schema) THEN
+	RAISE EXCEPTION 'cdb_schema (%) not found. It must be an existing schema', qi_cdb_schema;
+END IF;
+
+IF parent_classname IS NOT NULL THEN
+	result_text := concat(qi_cdb_schema,',', p_oc_id,'(', parent_classname,')', ',', oc_id, '(', class_name,'),', LOWER(view_type), attri_suffix);
+ELSE
+	result_text := concat(qi_cdb_schema,',', oc_id, '(', class_name,'),', LOWER(view_type), attri_suffix);
+END IF;
+
+-- Get all existing layer names based on the target classes from the target cdb_schema
+FOR r IN 
+	EXECUTE format('
+	SELECT layer_name, av_table_name
+	FROM %I.layer_metadata AS l 
+	WHERE l.cdb_schema = %L 
+		AND l.parent_objectclass_id %s AND l.objectclass_id = %L
+		AND l.is_matview = %L AND l.is_joins IS FALSE;
+	', qi_usr_schema, qi_cdb_schema, CASE WHEN p_oc_id IS NOT NULL THEN concat('=',p_oc_id) ELSE 'IS NULL' END, oc_id, is_matview)
+LOOP
+	found_record := TRUE; -- Set the flag to TRUE if the loop runs, indicating a record was found
+	
+	-- Drop the layer and associated attribute views
+	sql_drop	:= concat('DROP ', view_type,' IF EXISTS ', qi_usr_schema,'.', r.layer_name, ' CASCADE;');
+	sql_del 	:= concat('
+	DELETE FROM ',qi_usr_schema,'.layer_metadata AS l WHERE l.cdb_schema = ',ql_cdb_schema,' AND l.layer_name = ',quote_literal(r.layer_name),';
+	WITH m AS (SELECT max(id) AS max_id FROM ',qi_usr_schema,'.layer_metadata)
+	SELECT setval(''',qi_usr_schema,'.layer_metadata_id_seq''::regclass, m.max_id, TRUE) FROM m;
+	');
+	sql_statement := concat(sql_drop, sql_del);
+	EXECUTE sql_statement;
+	
+	-- Drop associated attribute views if required
+	IF is_drop_attris THEN
+		sql_drop := concat('DROP ', view_type,' IF EXISTS ', qi_usr_schema,'.', r.av_table_name, ' CASCADE;');
+		EXECUTE sql_drop;
+	END IF;
+END LOOP;
+
+-- If no records were found, raise an exception
+IF NOT found_record THEN
+	RAISE EXCEPTION 'No layers found for the given conditions: %', result_text;
+END IF;
+
+RETURN result_text;
+
+EXCEPTION
+	WHEN QUERY_CANCELED THEN
+		RAISE EXCEPTION 'qgis_pkg.drop_class_layers_attri_table(): Error QUERY_CANCELED';
+ 	WHEN OTHERS THEN
+		RAISE EXCEPTION 'qgis_pkg.drop_class_layers_attri_table(): %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
+COMMENT ON FUNCTION qgis_pkg.drop_class_layers_attri_table(varchar, varchar, integer, integer, boolean, boolean) IS 'Batch dropping layers generated using approach 3 based on objectclass_id from specified schema. Selectable to cascade dropping the associated integrated attribute table (materialized) view(s)';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_class_layers_attri_table(varchar, varchar, integer, integer, boolean, boolean) FROM PUBLIC;
+--Example
+-- VIEW
+-- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'alderaan', 0, 901, 'lod1Solid', 1, NULL, FALSE, TRUE); -- VIEW g+ ALL a (TABLE)
+-- SELECT * FROM qgis_pkg.drop_class_layers_attri_table('qgis_bstsai', 'alderaan', NULL, 901) -- only drop layer view
+-- SELECT * FROM qgis_pkg.drop_class_layers_attri_table('qgis_bstsai', 'alderaan', NULL, 901, FALSE, TRUE) -- drop layer view & integrated attri table view
+-- MATVIEW
+-- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'alderaan', 0, 901, 'lod1Solid', 1, NULL, TRUE, TRUE); -- MATVIEW g+ ALL a (TABLE)
+-- SELECT * FROM qgis_pkg.drop_class_layers_attri_table('qgis_bstsai', 'alderaan', NULL, 901, TRUE) -- only drop layer matview
+-- SELECT * FROM qgis_pkg.drop_class_layers_attri_table('qgis_bstsai', 'alderaan', NULL, 901, TRUE, TRUE) -- drop layer view & integrated attri table matview
+
+
+----------------------------------------------------------------
+-- Create FUNCTION QGIS_PKG.DROP_ALL_LAYER
+----------------------------------------------------------------
+DROP FUNCTION IF EXISTS qgis_pkg.drop_all_layer(varchar, varchar, boolean, boolean, boolean) CASCADE;
+CREATE OR REPLACE FUNCTION qgis_pkg.drop_all_layer(
+	usr_schema varchar,
+	cdb_schema varchar,
+	is_matview boolean DEFAULT TRUE,
+	is_drop_attris boolean DEFAULT TRUE,
+	is_joins boolean DEFAULT FALSE
+)
+RETURNS varchar
+AS $$
+DECLARE
+	qi_usr_schema varchar := quote_ident(usr_schema);
+	qi_cdb_schema varchar := quote_ident(cdb_schema);
+	r RECORD;
+	
+BEGIN
+	-- Check if layer metadata table exists
+	IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'layer_metadata') THEN
+		RAISE EXCEPTION '%.layer_metadata table not yet created. Please create it first', qi_usr_schema;
+	END IF;
+
+	-- Loop through all available feature geometries
+	FOR r IN
+		EXECUTE format('
+		SELECT DISTINCT parent_objectclass_id AS p_oc_id, objectclass_id AS oc_id
+		FROM %I.layer_metadata AS l
+		WHERE l.cdb_schema = %L AND l.is_matview = %L
+		', qi_usr_schema, qi_cdb_schema, is_matview)
+	LOOP
+		-- For layers generated using apporach 1 & 2 -> Multiple joins of attribute (materialized) views
+		IF is_joins THEN
+			PERFORM qgis_pkg.drop_class_layers_attri_joins(qi_usr_schema, qi_cdb_schema, r.p_oc_id, r.oc_id, is_matview, is_drop_attris);
+		-- For layers generated using apporach 3 -> Single join of integrated attribute (materialized) view
+		ELSE
+			PERFORM qgis_pkg.drop_class_layers_attri_table(qi_usr_schema, qi_cdb_schema, r.p_oc_id, r.oc_id, is_matview, is_drop_attris);
+		END IF;
+	END LOOP;
+
+RETURN cdb_schema;
+
+EXCEPTION
+	WHEN QUERY_CANCELED THEN
+		RAISE EXCEPTION 'qgis_pkg.drop_all_layer(): Error QUERY_CANCELED';
+	WHEN OTHERS THEN 
+		RAISE EXCEPTION 'qgis_pkg.drop_all_layer(): %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION qgis_pkg.drop_all_layer(varchar, varchar, boolean, boolean, boolean) IS 'Drop all existing layers from the database with all existing attributes';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_all_layer(varchar, varchar, boolean, boolean, boolean) FROM public;
+-- Example
+-- SELECT * FROM qgis_pkg.create_all_layer('qgis_bstsai', 'alderaan');
+-- SELECT * FROM qgis_pkg.drop_all_layer('qgis_bstsai', 'alderaan', FALSE); -- drop layers & associated integrated attribute view (TABLE)
+-- SELECT * FROM qgis_pkg.drop_all_layer('qgis_bstsai', 'alderaan'); -- drop layers & associated integrated attribute matview (TABLE)
+-- SELECT * FROM qgis_pkg.drop_all_layer('qgis_bstsai', 'alderaan', FALSE, FALSE); -- only drop layers view (TABLE)
+-- SELECT * FROM qgis_pkg.drop_all_layer('qgis_bstsai', 'alderaan', TRUE, FALSE); -- only drop layers matview (TABLE)
+-- SELECT * FROM qgis_pkg.drop_all_layer('qgis_bstsai', 'alderaan', FALSE, TRUE, TRUE); -- drop layers & associated integrated attribute view (JOINS)
+-- SELECT * FROM qgis_pkg.drop_all_layer('qgis_bstsai', 'alderaan', TRUE, TRUE, TRUE); -- drop layers & associated integrated attribute matview (JOINS)

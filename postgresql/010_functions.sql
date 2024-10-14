@@ -1208,15 +1208,16 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.revoke_qgis_usr_privileges(varchar, varchar[
 /*  The function returns the alias of the given objectclass_id */
 DROP FUNCTION IF EXISTS qgis_pkg.objectclass_id_to_alias(integer);
 CREATE OR REPLACE FUNCTION qgis_pkg.objectclass_id_to_alias(
-	objectclass_id integer) 
-RETURNS text 
+	objectclass_id integer
+) 
+RETURNS varchar 
 AS $$
 DECLARE
-	oc_alias text := NULL;
+	oc_alias varchar := NULL;
 BEGIN
 EXECUTE format ('SELECT oc_alias FROM qgis_pkg.classname_lookup WHERE oc_id = %s', objectclass_id) INTO oc_alias;	
 IF oc_alias IS NULL THEN
-	RAISE EXCEPTION 'Alias of objectclass_id "%s" not found. Please make sure the feature of the objectclass_id can be instantiated!', objectclass_id;
+	RAISE EXCEPTION 'Alias of objectclass_id % not found. Please make sure the feature of the objectclass_id can be instantiated!', objectclass_id;
 END IF;
 RETURN oc_alias;
 
