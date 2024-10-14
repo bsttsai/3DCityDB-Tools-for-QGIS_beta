@@ -1802,27 +1802,27 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.create_all_attribute_view_in_schema(varchar,
 -- Create FUNCTION QGIS_PKG.DROP_ATTRIBUTE_VIEW()
 ----------------------------------------------------------------
 -- The function drops the specified attibute view and materialized view of the given objectclass in the given schema
-DROP FUNCTION IF EXISTS qgis_pkg.drop_attribute_view(varchar, varchar, integer, text, boolean);
+DROP FUNCTION IF EXISTS qgis_pkg.drop_attribute_view(varchar, varchar, integer, text, boolean, boolean);
 CREATE OR REPLACE FUNCTION qgis_pkg.drop_attribute_view(
 	usr_schema varchar,
 	cdb_schema varchar,
 	objectclass_id integer,
 	attribute_name text,
-	is_nested boolean DEFAULT FALSE
+	is_nested boolean DEFAULT FALSE,
+	is_matview boolean DEFAULT FALSE
 ) 
-RETURNS void AS $$
+RETURNS varchar AS $$
 DECLARE
 	qi_cdb_schema varchar := quote_ident(cdb_schema);
 	ql_cdb_schema varchar := quote_literal(cdb_schema);
-	ql_attri_name varchar := quote_literal(attribute_name);
 	qi_usr_schema varchar := quote_ident(usr_schema);
-	qi_attri_name varchar := attribute_name;
+	qi_attri_name varchar := quote_ident(attribute_name);
+	ql_attri_name varchar := quote_literal(attribute_name);
 	classname text := (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, objectclass_id));
-	qi_oc_id integer := objectclass_id;
-	view_type varchar;
+	oc_id integer := objectclass_id;
+	view_type varchar := (CASE WHEN is_matview THEN 'MATERIALIZED VIEW' ELSE 'VIEW' END);
 	av_name varchar;
-	amv_name varchar;
-	ct_type_name varchar;
+	sql_del  text := (CASE WHEN is_matview THEN 'mview_name = NULL,mview_refresh_date = NULL, last_modification_date = clock_timestamp()' ELSE '	view_name = NULL,view_creation_date = NULL, last_modification_date = clock_timestamp()' END);
 	sql_drop text;
 	r RECORD;
 	
@@ -1836,42 +1836,19 @@ IF NOT is_nested THEN
 	-- Inline attribute
 	FOR r IN
 		EXECUTE format('
-		SELECT fam.view_name, fam.mview_name, fam.ct_type_name
+		SELECT fam.view_name, fam.mview_name
 		FROM %I.feature_attribute_metadata AS fam
 		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.attribute_name = %L
-		', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name)
+		', qi_usr_schema, qi_cdb_schema, oc_id, attribute_name)
 	LOOP
-		av_name  := r.view_name;
-		amv_name := r.mview_name;
-		ct_type_name := r.ct_type_name;
-		IF av_name IS NOT NULL THEN
-			sql_drop := concat('DROP VIEW IF EXISTS ', qi_usr_schema,'.',av_name,' CASCADE;');
-			EXECUTE sql_drop;
-			RAISE NOTICE 'Drop view of % in cdb_schema %', av_name, cdb_schema;
-		END IF;
-
-		IF amv_name IS NOT NULL THEN
-			sql_drop := concat('DROP MATERIALIZED VIEW IF EXISTS ', qi_usr_schema,'.',amv_name,' CASCADE;');
-			EXECUTE sql_drop;
-			RAISE NOTICE 'Drop materialized view of % in cdb_schema %', amv_name, cdb_schema;
-		END IF;
-
-		IF ct_type_name IS NOT NULL THEN
-			sql_drop := concat('DROP TYPE IF EXISTS ',ct_type_name,';');
-			EXECUTE sql_drop;
-		END IF;
-		-- Delete view_name info
-		EXECUTE format('
-		UPDATE %I.feature_attribute_metadata AS fam
-		SET 
-			ct_type_name = NULL,
-			view_name = NULL, 
-			view_creation_date = NULL,
-			mview_name = NULL,
-			mview_refresh_date = NULL
-		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.attribute_name = %L;
-		', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name);
-		-- RAISE NOTICE '(Materialized) view of inline attribute % of class % in cdb_schema % is dropped!', attribute_name, classname, cdb_schema;
+		av_name  := (CASE WHEN is_matview THEN r.mview_name ELSE r.view_name END);
+		sql_drop := concat('
+			DROP ', view_type, ' IF EXISTS ', qi_usr_schema, '.', av_name, 'CASCADE;
+			UPDATE ',qi_usr_schema,'.feature_attribute_metadata AS fam SET ', sql_del,'
+			WHERE fam.cdb_schema = ',ql_cdb_schema,' AND fam.objectclass_id = ',oc_id,' AND fam.attribute_name = ',ql_attri_name,';
+		');
+		EXECUTE sql_drop;
+		RAISE NOTICE 'Drop % of % in cdb_schema %', LOWER(view_type), av_name, cdb_schema;
 	END LOOP;
 ELSE
 	-- Nested attribute
@@ -1881,41 +1858,20 @@ ELSE
 		FROM %I.feature_attribute_metadata AS fam
 		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.parent_attribute_name = %L
 		LIMIT 1
-		', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name)
+		', qi_usr_schema, qi_cdb_schema, oc_id, attribute_name)
 	LOOP
-		av_name  := r.view_name;
-		amv_name := r.mview_name;
-		ct_type_name := r.ct_type_name;
-		IF av_name IS NOT NULL THEN
-			sql_drop := concat('DROP VIEW IF EXISTS ', qi_usr_schema,'.',av_name,' CASCADE;');
-			EXECUTE sql_drop;
-			RAISE NOTICE 'Drop view of % in cdb_schema %', av_name, cdb_schema;
-		END IF;
-
-		IF amv_name IS NOT NULL THEN
-			sql_drop := concat('DROP MATERIALIZED VIEW IF EXISTS ', qi_usr_schema,'.',amv_name,' CASCADE;');
-			EXECUTE sql_drop;
-			RAISE NOTICE 'Drop materialized view of % in cdb_schema %', amv_name, cdb_schema;
-		END IF;
-
-		IF ct_type_name IS NOT NULL THEN
-			sql_drop := concat('DROP TYPE IF EXISTS ',ct_type_name,';');
-			EXECUTE sql_drop;
-		END IF;
-		-- Delete view_name info
-		EXECUTE format('
-		UPDATE %I.feature_attribute_metadata AS fam
-		SET 
-			ct_type_name = NULL,
-			view_name = NULL, 
-			view_creation_date = NULL,
-			mview_name = NULL,
-			mview_refresh_date = NULL
-		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.parent_attribute_name = %L;
-		', qi_usr_schema, qi_cdb_schema, qi_oc_id, qi_attri_name);
-		-- RAISE NOTICE '(Materialized) views of nested attribute % of class % in cdb_schema % are dropped!', attribute_name, classname, cdb_schema;
+		av_name  := (CASE WHEN is_matview THEN r.mview_name ELSE r.view_name END);
+		sql_drop := concat('
+			DROP ', view_type, ' IF EXISTS ', qi_usr_schema, '.', av_name, 'CASCADE;
+			UPDATE ',qi_usr_schema,'.feature_attribute_metadata AS fam SET ', sql_del,'
+			WHERE fam.cdb_schema = ',ql_cdb_schema,' AND fam.objectclass_id = ',oc_id,' AND fam.parent_attribute_name = ',ql_attri_name,';
+		');
+		EXECUTE sql_drop;
+		RAISE NOTICE 'Drop % of % in cdb_schema %', LOWER(view_type), av_name, cdb_schema;
 	END LOOP;
 END IF;
+
+RETURN av_name;
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
@@ -1924,38 +1880,42 @@ EXCEPTION
 		RAISE EXCEPTION 'qgis_drop_attribute_view(): %', SQLERRM;
 END;
 $$ LANGUAGE plpgsql;
-COMMENT ON FUNCTION qgis_pkg.drop_attribute_view(varchar, varchar, integer, text, boolean) IS 'Drop specified attribute (materialized) views of the given objectclass feature in the schema';
-REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_attribute_view(varchar, varchar, integer, text, boolean) FROM PUBLIC;
+COMMENT ON FUNCTION qgis_pkg.drop_attribute_view(varchar, varchar, integer, text, boolean, boolean) IS 'Drop specified attribute (materialized) views of the given objectclass feature in the schema';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_attribute_view(varchar, varchar, integer, text, boolean, boolean) FROM PUBLIC;
 -- Example
--- SELECT * FROM qgis_pkg.drop_attribute_view('qgis_bstsai', 'citydb', 901, 'function');
--- SELECT * FROM qgis_pkg.drop_attribute_view('qgis_bstsai', 'citydb', 901, 'height', TRUE);
+-- SELECT * FROM qgis_pkg.drop_attribute_view('qgis_bstsai', 'alderaan', 901, 'dateOfConstruction'); -- drop inline attribute view
+-- SELECT * FROM qgis_pkg.drop_attribute_view('qgis_bstsai', 'citydb', 901, 'description', FALSE, TRUE); -- drop inline attribute matview
+-- SELECT * FROM qgis_pkg.drop_attribute_view('qgis_bstsai', 'citydb', 901, 'height', TRUE); -- drop nested attribute view
+-- SELECT * FROM qgis_pkg.drop_attribute_view('qgis_bstsai', 'citydb', 901, 'height', TRUE, TRUE); -- drop nested attribute matview
 
 
 ----------------------------------------------------------------
 -- Create FUNCTION QGIS_PKG.DROP_ALL_ATTRIBUTE_VIEWS()
 ----------------------------------------------------------------
--- The function drops all available attibute view and materialized view in the given schema
+-- The function drops all existing attibute view and materialized view in the given schema
 -- If objectclass_id provided, drop all available attribute view and mv of that objectclass_id
 -- Otherwise, drop all attibute view in the schema
-DROP FUNCTION IF EXISTS qgis_pkg.drop_all_attribute_view(varchar, varchar, integer);
+DROP FUNCTION IF EXISTS qgis_pkg.drop_all_attribute_view(varchar, varchar, integer, boolean);
 CREATE OR REPLACE FUNCTION qgis_pkg.drop_all_attribute_view(
 	usr_schema varchar,
 	cdb_schema varchar,
-	objectclass_id integer DEFAULT NULL
+	objectclass_id integer DEFAULT NULL,
+	is_matview boolean DEFAULT FALSE
 ) 
 RETURNS void AS $$
 DECLARE
 	qi_usr_schema varchar := quote_ident(usr_schema);
 	qi_cdb_schema varchar := quote_ident(cdb_schema);
 	ql_cdb_schema varchar := quote_literal(cdb_schema);
-	qi_oc_id integer := objectclass_id;
+	view_type varchar := (CASE WHEN is_matview THEN 'MATERIALIZED VIEW' ELSE 'VIEW' END);
+	oc_id integer := objectclass_id;
 	classname varchar;
 	r RECORD;
 BEGIN
 
 IF objectclass_id IS NOT NULL THEN
 	classname := (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, objectclass_id));
-	RAISE NOTICE 'Drop all attribute (materialized) view(s) of % (oc_id = %) in schema %', classname, qi_oc_id, cdb_schema;
+	RAISE NOTICE 'Drop all attribute %(s) of % (oc_id = %) in schema %', LOWER(view_type), classname, oc_id, cdb_schema;
 	FOR r IN 
 		EXECUTE format('
 		SELECT fam.attribute_name, fam.is_nested
@@ -1966,13 +1926,13 @@ IF objectclass_id IS NOT NULL THEN
 		FROM %I.feature_attribute_metadata AS fam
 		WHERE fam.cdb_schema = %L AND fam.objectclass_id = %L AND fam.is_nested IS TRUE
 		',
-		qi_usr_schema, qi_cdb_schema, qi_oc_id,
-		qi_usr_schema, qi_cdb_schema, qi_oc_id)
+		qi_usr_schema, qi_cdb_schema, oc_id,
+		qi_usr_schema, qi_cdb_schema, oc_id)
 	LOOP
-		PERFORM qgis_pkg.drop_attribute_view(qi_usr_schema, qi_cdb_schema, qi_oc_id, r.attribute_name, r.is_nested);
+		PERFORM qgis_pkg.drop_attribute_view(qi_usr_schema, qi_cdb_schema, oc_id, r.attribute_name, r.is_nested, is_matview);
 	END LOOP;
 ELSE
-	RAISE NOTICE 'Drop all attribute (materialized) view(s) in schema %', cdb_schema;
+	RAISE NOTICE 'Drop all attribute %(s) in schema %', LOWER(view_type), cdb_schema;
 	FOR r IN
 		EXECUTE format('
 		SELECT fam.objectclass_id, fam.attribute_name, fam.view_name, fam.mview_name, fam.is_nested
@@ -1986,7 +1946,7 @@ ELSE
 		qi_usr_schema, qi_cdb_schema,
 		qi_usr_schema, qi_cdb_schema)
 	LOOP
-		PERFORM qgis_pkg.drop_attribute_view(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.attribute_name, r.is_nested);
+		PERFORM qgis_pkg.drop_attribute_view(qi_usr_schema, qi_cdb_schema, r.objectclass_id, r.attribute_name, r.is_nested, is_matview);
 	END LOOP;
 END IF;
 
@@ -1997,8 +1957,10 @@ EXCEPTION
 		RAISE EXCEPTION 'qgis_pkg.drop_all_views: %', SQLERRM;
 END;
 $$ LANGUAGE plpgsql;
-COMMENT ON FUNCTION qgis_pkg.drop_all_attribute_view(varchar, varchar, integer) IS 'If objectclass_id provided, drop all available attribute view and mv of that objectclass_id. Otherwise, drop all attibute view in the schema';
-REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_all_attribute_view(varchar, varchar, integer) FROM PUBLIC;
+COMMENT ON FUNCTION qgis_pkg.drop_all_attribute_view(varchar, varchar, integer, boolean) IS 'If objectclass_id provided, drop all available attribute view and mv of that objectclass_id. Otherwise, drop all attibute view in the schema';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_all_attribute_view(varchar, varchar, integer, boolean) FROM PUBLIC;
 --Example
 -- SELECT * FROM qgis_pkg.drop_all_attribute_view('qgis_bstsai', 'citydb', 901); -- drop all 901 attribute views in citydb schema
--- SELECT * FROM qgis_pkg.drop_all_attribute_view('qgis_bstsai', 'citydb'); -- drop all attribute views in citydb schema
+-- SELECT * FROM qgis_pkg.drop_all_attribute_view('qgis_bstsai', 'citydb', 901, TRUE); -- drop all attribute matviews in citydb schema
+-- SELECT * FROM qgis_pkg.drop_all_attribute_view('qgis_bstsai', 'alderaan'); -- drop all attribute views in citydb schema
+-- SELECT * FROM qgis_pkg.drop_all_attribute_view('qgis_bstsai', 'alderaan', NULL, TRUE); -- drop all attribute matviews in citydb schema
