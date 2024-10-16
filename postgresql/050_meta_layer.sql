@@ -2,7 +2,11 @@
 --
 -- qgis_pkg.generate_layer_name_attri_joins()
 -- qgis_pkg.generate_layer_name_attri_table()
--- qgis_pkg.drop_single_layer()
+-- qgis_pkg.drop_single_layer_attri_joins()
+-- qgis_pkg.drop_class_layers_attri_joins()
+-- qgis_pkg.drop_single_layer_attri_table()
+-- qgis_pkg.drop_class_layers_attri_table()
+-- qgis_pkg.drop_all_layer()
 
 
 ----------------------------------------------------------------
@@ -698,7 +702,7 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION qgis_pkg.drop_all_layer(varchar, varchar, boolean, boolean, boolean) IS 'Drop all existing layers from the database with all existing attributes';
+COMMENT ON FUNCTION qgis_pkg.drop_all_layer(varchar, varchar, boolean, boolean, boolean) IS 'Drop all existing layers from the cdb_schema with all existing attributes';
 REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_all_layer(varchar, varchar, boolean, boolean, boolean) FROM public;
 -- Example
 -- SELECT * FROM qgis_pkg.create_all_layer('qgis_bstsai', 'alderaan');
