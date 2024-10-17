@@ -1,5 +1,5 @@
 -- ***********************************************************************
---
+-- Version: P5(Final) Oct.17.2024
 -- This script created the qgis_pkg schema, and then installs a set of functions into it
 -- List of functions:
 --
@@ -78,7 +78,7 @@ major_version  := 0;
 minor_version  := 0;
 minor_revision := 0;
 code_name      := 'May breeze';
-release_date   := '2024-10-27'::date;
+release_date   := '2024-10-29'::date;
 version        := concat(major_version,'.',minor_version,'.',minor_revision);
 full_version   := concat(major_version,'.',minor_version,'.',minor_revision,' "',code_name,'", released on ',release_date);
 
@@ -636,7 +636,8 @@ DROP FUNCTION IF EXISTS qgis_pkg.create_qgis_usr_schema(varchar, varchar) CASCAD
 CREATE OR REPLACE FUNCTION qgis_pkg.create_qgis_usr_schema(
 	usr_name varchar
 )
-RETURNS void AS $$
+RETURNS varchar
+AS $$
 DECLARE
 	tb_names_array	varchar[] := ARRAY['extents'];
 	tb_name 	varchar;
@@ -658,6 +659,8 @@ IF (usr_name = 'postgres') OR (qgis_pkg.is_superuser(usr_name) IS TRUE) THEN
 ELSE
 	-- Revoke privileges from qgis_pkg schema if any. Only for normal users
 	EXECUTE format('REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA qgis_pkg FROM %I;',usr_name);
+	EXECUTE format('REVOKE SELECT ON TABLE qgis_pkg.classname_lookup FROM %I;', usr_name);
+	EXECUTE format('REVOKE SELECT ON TABLE qgis_pkg.attribute_datatype_lookup FROM %I;', usr_name);
 	EXECUTE format('REVOKE USAGE ON SCHEMA qgis_pkg FROM %I;', usr_name);
 END IF;
 
@@ -671,6 +674,14 @@ EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', usr_schema);
 
 -- Create new schema and tables
 EXECUTE format('
+DROP TABLE IF EXISTS %I.feature_geometry_metadata CASCADE;
+CREATE TABLE %I.feature_geometry_metadata (LIKE qgis_pkg.feature_geometry_metadata_template INCLUDING ALL);
+ALTER TABLE %I.feature_geometry_metadata OWNER TO %I;
+
+DROP TABLE IF EXISTS %I.feature_attribute_metadata CASCADE;
+CREATE TABLE %I.feature_attribute_metadata (LIKE qgis_pkg.feature_attribute_metadata_template INCLUDING ALL);
+ALTER TABLE %I.feature_attribute_metadata OWNER TO %I;
+
 DROP TABLE IF EXISTS %I.layer_metadata CASCADE;
 CREATE TABLE %I.layer_metadata (LIKE qgis_pkg.layer_metadata_template INCLUDING ALL);
 ALTER TABLE %I.layer_metadata OWNER TO %I;
@@ -679,6 +690,8 @@ DROP TABLE IF EXISTS %I.extents CASCADE;
 CREATE TABLE %I.extents (LIKE qgis_pkg.extents_template INCLUDING ALL);
 ALTER TABLE %I.extents OWNER TO %I;
 ',
+usr_schema, usr_schema, usr_schema, usr_name,
+usr_schema, usr_schema, usr_schema, usr_name,
 usr_schema, usr_schema, usr_schema, usr_name,
 usr_schema, usr_schema, usr_schema, usr_name
 );
@@ -713,6 +726,9 @@ INSERT INTO qgis_pkg.usr_schema (usr_name, usr_schema, creation_date) VALUES
 EXECUTE format('GRANT USAGE, CREATE ON SCHEMA %I TO %I;', usr_schema, usr_name);
 -- Grant privileges to access the qgis_pkg schema use functions in qgis_pkg
 EXECUTE format('GRANT USAGE ON SCHEMA qgis_pkg TO %I;', usr_name);
+-- Grant privileges to read from the following tables in qgis_pkg
+EXECUTE format('GRANT SELECT ON TABLE qgis_pkg.classname_lookup TO %I;', usr_name);
+EXECUTE format('GRANT SELECT ON TABLE qgis_pkg.attribute_datatype_lookup TO %I;', usr_name);
 
 IF (usr_name = 'postgres') OR (qgis_pkg.is_superuser(usr_name) IS TRUE) THEN
 	NULL;
@@ -736,6 +752,8 @@ ELSE
 	EXECUTE format('REVOKE EXECUTE ON FUNCTION qgis_pkg.revoke_qgis_usr_privileges(varchar, varchar) FROM %I;', usr_name);
 	EXECUTE format('REVOKE EXECUTE ON FUNCTION qgis_pkg.revoke_qgis_usr_privileges(varchar, varchar[]) FROM %I;', usr_name);
 END IF;
+
+RETURN usr_schema;
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
@@ -1190,15 +1208,16 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.revoke_qgis_usr_privileges(varchar, varchar[
 /*  The function returns the alias of the given objectclass_id */
 DROP FUNCTION IF EXISTS qgis_pkg.objectclass_id_to_alias(integer);
 CREATE OR REPLACE FUNCTION qgis_pkg.objectclass_id_to_alias(
-	objectclass_id integer) 
-RETURNS text 
+	objectclass_id integer
+) 
+RETURNS varchar 
 AS $$
 DECLARE
-	oc_alias text := NULL;
+	oc_alias varchar := NULL;
 BEGIN
 EXECUTE format ('SELECT oc_alias FROM qgis_pkg.classname_lookup WHERE oc_id = %s', objectclass_id) INTO oc_alias;	
 IF oc_alias IS NULL THEN
-	RAISE EXCEPTION 'Alias of objectclass_id "%s" not found. Please make sure the feature of the objectclass_id can be instantiated!', objectclass_id;
+	RAISE EXCEPTION 'Alias of objectclass_id % not found. Please make sure the feature of the objectclass_id can be instantiated!', objectclass_id;
 END IF;
 RETURN oc_alias;
 
