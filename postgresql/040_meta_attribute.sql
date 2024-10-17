@@ -1,9 +1,13 @@
+-- ***********************************************************************
+--
+-- This script installs a set of functions into qgis_pkg schema
 -- List of functions:
 --
 -- qgis_pkg.check_feature_inline_attribute()
 -- qgis_pkg.check_feature_nested_attribute()
 -- qgis_pkg.update_feature_attribute_metadata()
-
+--
+-- ***********************************************************************
 
 ----------------------------------------------------------------
 -- Create FUNCTION QGIS_PKG.CHECK_FEATURE_INLINE_ATTRIBUTE
@@ -313,7 +317,7 @@ LOOP
 	        PERFORM qgis_pkg.check_feature_inline_attribute(usr_schema, cdb_schema, oc_id, oc_id_inline_attri, cdb_bbox_type);
 	    END LOOP;
 	END IF;
-    RAISE NOTICE 'oc_id "%" scanned (cdb_schema: % , extent: %, inline_attribute_num: %) and updated to table "qgis_pkg.feature_attribute_metadata"', oc_id, qi_cdb_schema, cdb_bbox_type, inline_attri_count;
+    RAISE NOTICE 'oc_id % scanned (cdb_schema: % , extent: %, inline_attribute_num: %) and updated to table %.feature_attribute_metadata', oc_id, qi_cdb_schema, cdb_bbox_type, inline_attri_count, qi_usr_schema;
 
     -- CHECK NESTED ATTRIBUTES
 	IF nested_attri_count IS NOT NULL THEN
@@ -322,7 +326,7 @@ LOOP
             PERFORM qgis_pkg.check_feature_nested_attribute(usr_schema, cdb_schema, oc_id, oc_id_nested_attris[iter_count][1], oc_id_nested_attris[iter_count][2], cdb_bbox_type);
             iter_count := iter_count + 1;
         END LOOP;
-        RAISE NOTICE 'oc_id "%" scanned (cdb_schema: % , extent: %, nested_attribute_num: %) and updated to table "qgis_pkg.feature_attribute_metadata"', oc_id, qi_cdb_schema, cdb_bbox_type, nested_attri_count;
+        RAISE NOTICE 'oc_id % scanned (cdb_schema: % , extent: %, nested_attribute_num: %) and updated to table %.feature_attribute_metadata', oc_id, qi_cdb_schema, cdb_bbox_type, nested_attri_count, qi_usr_schema;
         iter_count := 1;
 	END IF;
 END LOOP;

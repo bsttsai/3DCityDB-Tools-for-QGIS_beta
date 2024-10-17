@@ -1,3 +1,6 @@
+-- ***********************************************************************
+--
+-- This script installs a set of functions into qgis_pkg schema
 -- List of functions:
 --
 -- qgis_pkg.get_all_attribute_id_in_schema()
@@ -5,12 +8,15 @@
 -- qgis_pkg.generate_sql_layer_matview_footer_join()
 -- qgis_pkg.generate_sql_layer_matview_footer_attri_table()
 -- qgis_pkg.create_layer_multiple_joins()
--- qgis_pkg.create_layer_multiple_joins_all_attri()
 -- qgis_pkg.get_attribute_columns()
 -- qgis_pkg.check_attribute_column_is_json()
 -- qgis_pkg.create_attris_table_view()
 -- qgis_pkg.create_layer_attri_table()
 -- qgis_pkg.create_layer()
+-- qgis_pkg.create_class_layers()
+-- qgis_pkg.create_all_layer()
+--
+-- ***********************************************************************
 
 
 ----------------------------------------------------------------
@@ -320,7 +326,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.generate_sql_layer_matview_footer_attri_tabl
 
 
 ----------------------------------------------------------------
--- Create FUNCTION QGIS_PKG.CREATE_LAYER_MULTIPLE_JOIN()
+-- Create FUNCTION QGIS_PKG.CREATE_LAYER_MULTIPLE_JOINS()
 ----------------------------------------------------------------
 DROP FUNCTION IF EXISTS    qgis_pkg.create_layer_multiple_joins(varchar, varchar, integer, integer[], boolean, boolean) CASCADE;
 CREATE OR REPLACE FUNCTION qgis_pkg.create_layer_multiple_joins(
@@ -329,7 +335,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_layer_multiple_joins(
 	geometry_id integer,
 	attribute_ids integer[] DEFAULT NULL,
 	is_matview boolean DEFAULT FALSE,
-	is_all_attri boolean DEFAULT FALSE
+	is_all_attris boolean DEFAULT FALSE
 )
 RETURNS varchar
 AS $$
@@ -342,18 +348,11 @@ DECLARE
 	attri_val_cols varchar[]; -- store all val_col name of attribute view(s)
 	attri_val_col varchar; 
 	attri_address varchar; -- store the inline or nested attribute number and prefix. e.g,. _ia_{4}_na_{1} means 4 inline and 1 nested attributes are selected
-	geometry_prefix varchar := '_g_';
 	g_id integer := geometry_id;
-	g_type varchar;
 	inline_attri_ids integer[];
-	inline_prefix varchar := '_ia_{'; 
 	nested_attri_ids integer[];
-	nested_prefix varchar := '_na_{';
-	lv_prefix CONSTANT varchar := '=lv'; 
-	lmv_prefix CONSTANT varchar := '=lmv';
 	geom_view_name varchar; attri_view_name varchar;
 	attri_count integer := 1;
-	l_name varchar;
 	qi_lv_header text;
 	qi_lmv_header text;
 	qi_lmv_footer text;
@@ -375,7 +374,7 @@ DECLARE
 	sql_ins_vals text;
 	sql_ins text;
 	f_type varchar;
-	g_type_ins varchar;
+	g_type varchar;
 	lod varchar;
 	attri_id integer;
 	attri_ids integer[];
@@ -385,6 +384,7 @@ DECLARE
 	inline_attris varchar[];
 	nested_attris varchar[];
 	num_features integer;
+	l_name varchar;
 
 BEGIN
 -- Check if usr_schema exists
@@ -448,21 +448,23 @@ IF p_oc_id <> 0 THEN
 END IF;
 classname 	:= qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id);
 class_alias := qgis_pkg.objectclass_id_to_alias(oc_id);
-g_type 		:= r.geometry_type;
-g_type_ins  := (CASE WHEN r.geometry_name LIKE 'lod%' AND LENGTH(r.geometry_name) > 3 THEN SUBSTRING(r.geometry_name FROM POSITION('lod%' IN r.geometry_name) + 5) ELSE r.geometry_type END);
+g_type 		:= (CASE WHEN r.geometry_name LIKE 'lod%' AND LENGTH(r.geometry_name) > 3 THEN SUBSTRING(r.geometry_name FROM POSITION('lod%' IN r.geometry_name) + 5) ELSE r.geometry_type END);
 lod			:= concat('lod', r.lod);
 EXECUTE format('SELECT feature_type FROM qgis_pkg.classname_lookup WHERE oc_id = %L', oc_id) INTO f_type;
 
 sql_ins_vals := concat('VALUES (
-', ql_cdb_schema,',', quote_literal(f_type),',', oc_id,',', quote_literal(classname),',', quote_literal(lod),',', quote_literal(g_type_ins),',
-', quote_literal(geom_view_name),',', quote_literal(is_matview), ',', quote_literal(is_all_attri),', TRUE,', num_features,', clock_timestamp(),
+', ql_cdb_schema,',', quote_literal(f_type),',', oc_id,',', quote_literal(classname),',', quote_literal(lod),',', quote_literal(g_type),',
+', quote_literal(geom_view_name),',', quote_literal(is_matview), ',', quote_literal(is_all_attris),', TRUE,', num_features,', clock_timestamp(),
 ');
 
-IF is_all_attri AND attribute_ids IS NULL THEN
+IF is_all_attris AND attribute_ids IS NULL THEN
 	inline_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id);
 	nested_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id, TRUE);
 	attribute_ids := ARRAY(SELECT unnest(inline_attri_ids || nested_attri_ids) AS id ORDER BY id ASC);
 END IF;
+
+-- generate layer name
+SELECT qgis_pkg.generate_layer_name_attri_joins(qi_usr_schema, qi_cdb_schema, g_id, attribute_ids, is_matview, is_all_attris) INTO l_name;
 
 -- retrieve the attribute view(s)
 IF attribute_ids IS NULL THEN
@@ -470,11 +472,8 @@ IF attribute_ids IS NULL THEN
 	attri_address := '_no_attri_joins"';
 	IF NOT is_matview THEN
 		IF parent_class_alias IS NOT NULL THEN
-			l_name			:= concat('"', lv_prefix, '_', qi_cdb_schema, '_', parent_class_alias, '_', class_alias, '_', lod, '_', g_type, attri_address);
 			sql_ins_cols 	:= concat(sql_ins_cols, 'parent_objectclass_id, parent_classname,');
 			sql_ins_vals 	:= concat(sql_ins_vals, p_oc_id,',', quote_literal(parent_classname),',');
-		ELSE
-			l_name 			:= concat('"', lv_prefix, '_', qi_cdb_schema, '_', class_alias, '_', lod, '_', g_type, attri_address);
 		END IF;
 		qi_lv_header := qgis_pkg.generate_sql_view_header(qi_usr_schema, l_name);
 		sql_layer := concat(qi_lv_header, 
@@ -483,11 +482,8 @@ IF attribute_ids IS NULL THEN
 		');
 	ELSE 
 		IF parent_class_alias IS NOT NULL THEN
-			l_name 			:= concat('"', lmv_prefix, '_', qi_cdb_schema, '_', parent_class_alias, '_', class_alias, '_', lod, '_', g_type, attri_address);
 			sql_ins_cols 	:= concat(sql_ins_cols, 'parent_objectclass_id, parent_classname,');
 			sql_ins_vals 	:= concat(sql_ins_vals, p_oc_id,',', quote_literal(parent_classname),',');
-		ELSE
-			l_name 	:= concat('"', lmv_prefix, '_', qi_cdb_schema, '_', class_alias, '_', lod, '_', g_type, attri_address);
 		END IF;
 		qi_lmv_header := qgis_pkg.generate_sql_matview_header(qi_usr_schema, l_name);
 		qi_lmv_footer := qgis_pkg.generate_sql_layer_matview_footer_join(qi_usr_name, qi_usr_schema, qi_cdb_schema, l_name, attribute_ids);
@@ -505,9 +501,9 @@ ELSE
 		-- Check the given attri_id is nested
 		EXECUTE format('SELECT is_nested FROM %I.feature_attribute_metadata WHERE id = %L', qi_usr_schema, attri_id) INTO is_nested;
 		IF is_nested THEN
-			nested_attris 		:= ARRAY_APPEND(nested_attris, selected_attri);
+			nested_attris := ARRAY_APPEND(nested_attris, selected_attri);
 		ELSE
-			inline_attris 		:= ARRAY_APPEND(inline_attris, selected_attri);
+			inline_attris := ARRAY_APPEND(inline_attris, selected_attri);
 		END IF;
 		attri_view_name := qgis_pkg.get_view_name(qi_usr_schema, attri_id, TRUE, is_matview);
 		-- check if the attribute views have been created, if not first created both attribute view and matview
@@ -545,31 +541,18 @@ ELSE
 	sql_ins_vals := concat(sql_ins_vals, quote_literal(attri_view_names), ',');
 
 	IF ARRAY_LENGTH(inline_attris, 1) > 0 THEN
-		IF is_all_attri THEN
-			attri_address := '_all_attri_joins';
-		ELSE
-			attri_address	:= concat(attri_address, inline_prefix, ARRAY_LENGTH(inline_attris, 1), '}');
-		END IF;
 		sql_ins_cols	:= concat(sql_ins_cols, 'inline_attris, ');
 		sql_ins_vals	:= concat(sql_ins_vals, quote_literal(inline_attris),',');
 	END IF;
 	IF ARRAY_LENGTH(nested_attris, 1) > 0 THEN
-		IF is_all_attri THEN
-			attri_address := '_all_attri_joins';
-		ELSE
-			attri_address 	:= concat(attri_address, nested_prefix, ARRAY_LENGTH(nested_attris, 1), '}');
-		END IF;
 		sql_ins_cols	:= concat(sql_ins_cols, 'nested_attris, ');
 		sql_ins_vals	:= concat(sql_ins_vals, quote_literal(nested_attris),',');
 	END IF;
 	
 	IF NOT is_matview THEN
 		IF parent_class_alias IS NOT NULL THEN
-			l_name 	:= concat('"', lv_prefix, '_', qi_cdb_schema, '_', parent_class_alias, '_', class_alias, '_', lod, '_', g_type, attri_address, '"');
 			sql_ins_cols 	:= concat(sql_ins_cols, 'parent_objectclass_id, parent_classname,');
 			sql_ins_vals 	:= concat(sql_ins_vals, p_oc_id,',', quote_literal(parent_classname),',');
-		ELSE
-			l_name 			:= concat('"', lv_prefix, '_', qi_cdb_schema, '_', class_alias, '_', lod, '_', g_type, attri_address, '"');
 		END IF;
 		qi_lv_header := qgis_pkg.generate_sql_view_header(qi_usr_schema, l_name);
 		sql_layer := concat(qi_lv_header, 
@@ -578,11 +561,8 @@ ELSE
 		);
 	ELSE
 		IF parent_class_alias IS NOT NULL THEN
-			l_name 			:= concat('"', lmv_prefix, '_', qi_cdb_schema, '_', parent_class_alias, '_', class_alias, '_', lod, '_', g_type, attri_address, '"');
 			sql_ins_cols 	:= concat(sql_ins_cols, 'parent_objectclass_id, parent_classname,');
 			sql_ins_vals 	:= concat(sql_ins_vals, p_oc_id,',', quote_literal(parent_classname),',');
-		ELSE
-			l_name 			:= concat('"', lmv_prefix, '_', qi_cdb_schema, '_', class_alias, '_', lod, '_', g_type, attri_address, '"');
 		END IF;
 		qi_lmv_header := qgis_pkg.generate_sql_matview_header(qi_usr_schema, l_name);
 		qi_lmv_footer := qgis_pkg.generate_sql_layer_matview_footer_join(qi_usr_name, qi_usr_schema, qi_cdb_schema, l_name, attribute_ids);
@@ -740,7 +720,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_attris_table_view(
 	geometry_id integer,
 	attribute_ids integer[] DEFAULT NULL,
 	is_matview boolean DEFAULT FALSE,
-	is_all_attri boolean DEFAULT FALSE
+	is_all_attris boolean DEFAULT FALSE
 )
 RETURNS integer[]
 AS $$
@@ -792,7 +772,7 @@ IF qi_cdb_schema IS NULL or NOT EXISTS(SELECT 1 FROM information_schema.schemata
 	RAISE EXCEPTION 'cdb_schema (%) not found. It must be an existing schema', qi_cdb_schema;
 END IF;
 
-IF is_all_attri THEN
+IF is_all_attris THEN
 	inline_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id);
 	nested_attri_ids := qgis_pkg.get_all_attribute_id_in_schema(qi_usr_schema, qi_cdb_schema, oc_id, TRUE);
 	attri_ids := ARRAY(SELECT unnest(inline_attri_ids || nested_attri_ids) AS id ORDER BY id ASC);
@@ -1007,7 +987,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_layer_attri_table(
 	geometry_id integer,
 	attribute_ids integer[] DEFAULT NULL,
 	is_matview boolean DEFAULT FALSE,
-	is_all_attri boolean DEFAULT FALSE
+	is_all_attris boolean DEFAULT FALSE
 )
 RETURNS varchar
 AS $$
@@ -1018,8 +998,6 @@ DECLARE
 	qi_cdb_schema varchar := quote_ident(cdb_schema);
 	ql_cdb_schema varchar := quote_literal(cdb_schema);
 	geom_view_name varchar; attri_view_name varchar;
-	view_prefix CONSTANT varchar := '_av_'; matview_prefix CONSTANT varchar := '_amv_';
-	lv_prefix CONSTANT varchar := '=lv'; lmv_prefix CONSTANT varchar := '=lmv';
 	view_col_names text[]; view_col_name text;
 	p_oc_id integer; 
 	oc_id integer; 
@@ -1028,7 +1006,6 @@ DECLARE
 	parent_class_alias varchar; 
 	class_alias varchar;
 	g_id integer := geometry_id;
-	g_type varchar;
 	sql_l_select text;
 	sql_l_from text;
 	sql_layer text;
@@ -1039,13 +1016,17 @@ DECLARE
 	qi_lmv_header text;
 	qi_lmv_footer text;
 
+	-- for integrated attribute view name creation
+	view_prefix CONSTANT varchar := '_av_';
+	matview_prefix CONSTANT varchar := '_amv_';
+
 	-- for layer metadata
 	sql_feat_count text;
 	sql_ins_cols text;
 	sql_ins_vals text;
 	sql_ins text;
 	f_type varchar;
-	g_type_ins varchar;
+	g_type varchar;
 	lod varchar;
 	attri_id integer;
 	attri_ids integer[];
@@ -1099,8 +1080,7 @@ IF p_oc_id <> 0 THEN
 END IF;
 classname 	:= qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id);
 class_alias := qgis_pkg.objectclass_id_to_alias(oc_id);
-g_type 		:= r.geometry_type;
-g_type_ins  := (CASE WHEN r.geometry_name LIKE 'lod%' AND LENGTH(r.geometry_name) > 3 THEN SUBSTRING(r.geometry_name FROM POSITION('lod%' IN r.geometry_name) + 5) ELSE r.geometry_type END);
+g_type  	:= (CASE WHEN r.geometry_name LIKE 'lod%' AND LENGTH(r.geometry_name) > 3 THEN SUBSTRING(r.geometry_name FROM POSITION('lod%' IN r.geometry_name) + 5) ELSE r.geometry_type END);
 lod			:= concat('lod', r.lod);
 EXECUTE format('SELECT feature_type FROM qgis_pkg.classname_lookup WHERE oc_id = %L', oc_id) INTO f_type;
 
@@ -1122,20 +1102,20 @@ sql_feat_count := concat('
 EXECUTE sql_feat_count INTO num_features;
 
 sql_ins_vals := concat('VALUES (
-', ql_cdb_schema,',', quote_literal(f_type),',', oc_id,',', quote_literal(classname),',', quote_literal(lod),',', quote_literal(g_type_ins),',
-', quote_literal(geom_view_name),',', quote_literal(is_matview),',', quote_literal(is_all_attri),',', num_features,', clock_timestamp(),
+', ql_cdb_schema,',', quote_literal(f_type),',', oc_id,',', quote_literal(classname),',', quote_literal(lod),',', quote_literal(g_type),',
+', quote_literal(geom_view_name),',', quote_literal(is_matview),',', quote_literal(is_all_attris),',', num_features,', clock_timestamp(),
 ');
 
-IF attribute_ids IS NULL AND NOT is_all_attri THEN
+-- generate layer name
+SELECT qgis_pkg.generate_layer_name_attri_table(qi_usr_schema, qi_cdb_schema, g_id, attribute_ids, is_matview, is_all_attris) INTO l_name;
+
+IF attribute_ids IS NULL AND NOT is_all_attris THEN
 	-- only geometry
 	attri_view_name := NULL;
 	IF NOT is_matview THEN
 		IF parent_class_alias IS NOT NULL THEN
-			l_name 			:= concat('"', lv_prefix, '_', qi_cdb_schema, '_', parent_class_alias, '_', class_alias, '_', lod, '_', g_type, '_no_attri_table"');
 			sql_ins_cols 	:= concat(sql_ins_cols, 'parent_objectclass_id, parent_classname,');
 			sql_ins_vals 	:= concat(sql_ins_vals, p_oc_id,',', quote_literal(parent_classname),',');
-		ELSE
-			l_name 			:= concat('"', lv_prefix, '_', qi_cdb_schema, '_', class_alias, '_', lod, '_', g_type, '_no_attri_table"');
 		END IF;
 		qi_lv_header 		:= qgis_pkg.generate_sql_view_header(qi_usr_schema, l_name);
 		sql_layer := concat(qi_lv_header,
@@ -1144,11 +1124,8 @@ IF attribute_ids IS NULL AND NOT is_all_attri THEN
 		);
 	ELSE
 		IF parent_class_alias IS NOT NULL THEN
-			l_name 			:= concat('"', lmv_prefix, '_', qi_cdb_schema, '_', parent_class_alias, '_', class_alias, '_', lod, '_', g_type, '_no_attri_table"');
 			sql_ins_cols 	:= concat(sql_ins_cols, 'parent_objectclass_id, parent_classname,');
 			sql_ins_vals 	:= concat(sql_ins_vals, p_oc_id,',', quote_literal(parent_classname),',');
-		ELSE
-			l_name 			:= concat('"', lmv_prefix, '_', qi_cdb_schema, '_', class_alias, '_', lod, '_', g_type, '_no_attri_table"');
 		END IF;
 		qi_lmv_header 		:= qgis_pkg.generate_sql_matview_header(qi_usr_schema, l_name);
 		qi_lmv_footer 		:= qgis_pkg.generate_sql_layer_matview_footer_attri_table(qi_usr_name, qi_usr_schema, qi_cdb_schema, l_name, attri_view_name);
@@ -1160,7 +1137,7 @@ IF attribute_ids IS NULL AND NOT is_all_attri THEN
 	END IF;
 ELSE
 	-- Create the attribute table view first
-	SELECT qgis_pkg.create_attris_table_view(qi_usr_schema, qi_cdb_schema, oc_id, geometry_id, attribute_ids, is_matview, is_all_attri) INTO attri_ids;
+	SELECT qgis_pkg.create_attris_table_view(qi_usr_schema, qi_cdb_schema, oc_id, geometry_id, attribute_ids, is_matview, is_all_attris) INTO attri_ids;
 
 	FOREACH attri_id IN ARRAY attri_ids
 	LOOP
@@ -1176,11 +1153,8 @@ ELSE
 	-- Generate attri_name for later finding the attri_view for joining
 	IF NOT is_matview THEN
 		IF parent_class_alias IS NOT NULL THEN
-			l_name 			:= concat('"', lv_prefix, '_', qi_cdb_schema, '_', parent_class_alias, '_', class_alias, '_', lod, '_', g_type, '_attri_table"');
 			sql_ins_cols 	:= concat(sql_ins_cols, 'parent_objectclass_id, parent_classname,');
 			sql_ins_vals 	:= concat(sql_ins_vals, p_oc_id,',', quote_literal(parent_classname),',');
-		ELSE
-			l_name 			:= concat('"', lv_prefix, '_', qi_cdb_schema, '_', class_alias, '_', lod, '_', g_type, '_attri_table"');
 		END IF;
 		qi_lv_header 	:= qgis_pkg.generate_sql_view_header(qi_usr_schema, l_name);
 		attri_view_name := concat('"', view_prefix, qi_cdb_schema, '_', classname, '_g_', geometry_id, '_attributes"');
@@ -1203,11 +1177,8 @@ ELSE
 		);
 	ELSE
 		IF parent_class_alias IS NOT NULL THEN
-			l_name 			:= concat('"', lmv_prefix, '_', qi_cdb_schema, '_', parent_class_alias, '_', class_alias, '_', lod, '_', g_type, '_attri_table"');
 			sql_ins_cols 	:= concat(sql_ins_cols, 'parent_objectclass_id, parent_classname,');
 			sql_ins_vals 	:= concat(sql_ins_vals, p_oc_id,',', quote_literal(parent_classname),',');
-		ELSE
-			l_name 			:= concat('"', lmv_prefix, '_', qi_cdb_schema, '_', class_alias, '_', lod, '_', g_type, '_attri_table"');
 		END IF;
 		qi_lmv_header 	:= qgis_pkg.generate_sql_matview_header(qi_usr_schema, l_name);
 		attri_view_name	:= concat('"', matview_prefix, qi_cdb_schema, '_', classname, '_g_', geometry_id, '_attributes"');
@@ -1286,7 +1257,7 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_layer(
 	lod integer,
 	attris text[] DEFAULT NULL,
 	is_matview boolean DEFAULT FALSE,
-	is_all_attri boolean DEFAULT FALSE,
+	is_all_attris boolean DEFAULT FALSE,
 	is_joins boolean DEFAULT FALSE
 )
 RETURNS varchar
@@ -1306,7 +1277,7 @@ DECLARE
 	
 BEGIN
 -- Prepare the Array of specified attributes
-IF attris IS NOT NULL AND NOT is_all_attri THEN
+IF attris IS NOT NULL AND NOT is_all_attris THEN
 	FOREACH attri IN ARRAY attris
 	LOOP
 		attri_id := qgis_pkg.get_attribute_key_id(qi_usr_schema, qi_cdb_schema, oc_id, attri);
@@ -1316,9 +1287,9 @@ END IF;
 
 -- Determine which method for layer creation
 IF NOT is_joins THEN
-	SELECT qgis_pkg.create_layer_attri_table(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri) INTO l_name;
+	SELECT qgis_pkg.create_layer_attri_table(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attris) INTO l_name;
 ELSE
-	SELECT qgis_pkg.create_layer_multiple_joins(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attri) INTO l_name;
+	SELECT qgis_pkg.create_layer_multiple_joins(qi_usr_schema, qi_cdb_schema, geom_id, attri_ids, is_matview, is_all_attris) INTO l_name;
 END IF;
 
 RETURN l_name;
@@ -1333,7 +1304,7 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION qgis_pkg.create_layer(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) IS 'Create feature class layer by joining geometry matview with either multiple join or table of attribute views';
 REVOKE EXECUTE ON FUNCTION qgis_pkg.create_layer(varchar, varchar, integer, integer, text, integer, text[], boolean, boolean, boolean) FROM public;
 -- Example
---(usr_schema, cdb_schema, p_oc_id, oc_id, geom_name, lod, attribute_name[], is_matview, is_all_attri, is_joins)
+--(usr_schema, cdb_schema, p_oc_id, oc_id, geom_name, lod, attribute_name[], is_matview, is_all_attris, is_joins)
 -- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'citydb', 0, 901, 'lod1Solid', 1); -- VIEW geom only 
 -- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'citydb', 0, 901, 'lod1Solid', 1, NULL, TRUE); -- MATVIEW geom only
 -- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'citydb', 0, 901, 'lod1Solid', 1, ARRAY['name','description'], FALSE, FALSE); -- VIEW g+a (TABLE) 
@@ -1345,6 +1316,102 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.create_layer(varchar, varchar, integer, inte
 -- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'citydb', 0, 901, 'lod1Solid', 1, NULL, FALSE, TRUE, TRUE); -- VIEW g+ ALL a (JOIN)
 -- SELECT * FROM qgis_pkg.create_layer('qgis_bstsai', 'citydb', 0, 901, 'lod1Solid', 1, NULL, TRUE, TRUE, TRUE); -- MATVIEW g+ ALL a (JOIN)
 -- SELECT qgis_pkg.create_layer('qgis_bstsai', 'vienna_v5', 0, 502, 'tin', 2, NULL, TRUE, FALSE); -- MATVIEW g+ ALL a (TABLE)
+
+
+----------------------------------------------------------------
+-- Create FUNCTION QGIS_PKG.CREATE_CLASS_LAYERS
+----------------------------------------------------------------
+DROP FUNCTION IF EXISTS qgis_pkg.create_class_layers(varchar, varchar, integer, integer, boolean, boolean) CASCADE;
+CREATE OR REPLACE FUNCTION qgis_pkg.create_class_layers(
+	usr_schema varchar,
+	cdb_schema varchar,
+	parent_objectclass_id integer,
+	objectclass_id integer,
+	is_matview boolean DEFAULT TRUE,
+	is_joins boolean DEFAULT FALSE
+)
+RETURNS varchar
+AS $$
+DECLARE
+	qi_usr_schema varchar 		:= quote_ident(usr_schema);
+	qi_cdb_schema varchar 		:= quote_ident(cdb_schema);
+	p_oc_id integer 			:= (CASE WHEN parent_objectclass_id IS NULL THEN 0 ELSE parent_objectclass_id END);
+	oc_id integer 				:= objectclass_id;
+	parent_classname varchar 	:= (CASE WHEN parent_objectclass_id IS NOT NULL THEN qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, p_oc_id) ELSE NULL END);
+	classname varchar 			:= (SELECT qgis_pkg.objectclass_id_to_classname(qi_cdb_schema, oc_id));
+	view_type varchar			:= (CASE WHEN is_matview THEN 'MATERIALIZED VIEW' ELSE 'VIEW' END);
+	layer_approach varchar		:= (CASE WHEN is_joins THEN 'attribute joins' ELSE 'attribute table' END);
+	attri_count integer;
+	result_text text;
+	r RECORD;
+	
+BEGIN
+	-- Check if feature geometry metadata table exists
+	IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_geometry_metadata') THEN
+		RAISE EXCEPTION '%.feature_geometry_metadata table not yet created. Please create it first', qi_usr_schema;
+	END IF;
+
+	-- Check if feature attribute metadata table exists
+	IF NOT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = qi_usr_schema AND table_name = 'feature_attribute_metadata') THEN
+		RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
+	END IF;
+
+	IF parent_classname IS NOT NULL THEN
+		result_text := concat(qi_cdb_schema,',', p_oc_id,'(', parent_classname,')', ',', oc_id, '(', classname,'),', LOWER(view_type), ',', layer_approach);
+	ELSE
+		result_text := concat(qi_cdb_schema,',', oc_id, '(', classname,'),', LOWER(view_type), ',', layer_approach);
+	END IF;
+
+	-- Loop through all existing feature geometries regarding the classess
+	FOR r IN
+		EXECUTE format('
+		SELECT parent_objectclass_id AS p_oc_id, objectclass_id AS oc_id, geometry_name AS geom, lod AS lod
+		FROM %I.feature_geometry_metadata AS fgm 
+		WHERE fgm.cdb_schema = %L
+			AND parent_objectclass_id = %L
+			AND objectclass_id = %L
+			AND fgm.geometry_name <> ''address'' 
+			AND fgm.postgis_geom_type IS NOT NULL
+		', qi_usr_schema, qi_cdb_schema, p_oc_id, oc_id)
+	LOOP
+		-- Count attributes for the current object class
+		EXECUTE format('
+		SELECT COUNT(*)
+		FROM %I.feature_attribute_metadata AS fam 
+		WHERE fam.cdb_schema = %L 
+			AND fam.objectclass_id = %L;
+		', qi_usr_schema, qi_cdb_schema, r.oc_id) INTO attri_count;
+
+		-- If there are attributes, use approach 3 with all attributes
+		IF attri_count > 0 THEN
+			PERFORM qgis_pkg.create_layer(qi_usr_schema, qi_cdb_schema, r.p_oc_id, r.oc_id, r.geom, r.lod::integer, NULL, is_matview, TRUE, is_joins); -- approach 3 specification with attributes
+		-- If no attributes exist, create layer with only the geometry
+		ELSE
+			PERFORM qgis_pkg.create_layer(qi_usr_schema, qi_cdb_schema, r.p_oc_id, r.oc_id, r.geom, r.lod::integer, NULL, is_matview, FALSE, is_joins); -- approach 3 specification without attributes
+		END IF;
+	END LOOP;
+
+RETURN result_text;
+
+EXCEPTION
+	WHEN QUERY_CANCELED THEN
+		RAISE EXCEPTION 'qgis_pkg.create_class_layers(): Error QUERY_CANCELED';
+	WHEN OTHERS THEN 
+		RAISE EXCEPTION 'qgis_pkg.create_class_layers(): %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION qgis_pkg.create_class_layers(varchar, varchar, integer, integer, boolean, boolean) IS 'Create all existing layers of the selected class in the cdb_schema with all existing attributes';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.create_class_layers(varchar, varchar, integer, integer, boolean, boolean) FROM public;
+-- Example
+-- SELECT * FROM qgis_pkg.create_class_layers('qgis_bstsai', 'alderaan', NULL, 901, FALSE); -- view (TABLE)
+-- SELECT * FROM qgis_pkg.create_class_layers('qgis_bstsai', 'alderaan', 901, 709, FALSE); -- view (TABLE)
+-- SELECT * FROM qgis_pkg.create_class_layers('qgis_bstsai', 'alderaan', NULL, 901); -- matview (TABLE)
+-- SELECT * FROM qgis_pkg.create_class_layers('qgis_bstsai', 'alderaan', 901, 709); -- matview (TABLE)
+-- SELECT * FROM qgis_pkg.create_class_layers('qgis_bstsai', 'alderaan',  NULL, 901, FALSE, TRUE); -- view (JOINS)
+-- SELECT * FROM qgis_pkg.create_class_layers('qgis_bstsai', 'alderaan', 901, 709, FALSE, TRUE); -- view (JOINS)
+-- SELECT * FROM qgis_pkg.create_class_layers('qgis_bstsai', 'alderaan',  NULL, 901, TRUE, TRUE); -- matview (JOINS)
+-- SELECT * FROM qgis_pkg.create_class_layers('qgis_bstsai', 'alderaan', 901, 709, TRUE, TRUE); -- matview (JOINS)
 
 
 ----------------------------------------------------------------
@@ -1360,10 +1427,13 @@ CREATE OR REPLACE FUNCTION qgis_pkg.create_all_layer(
 RETURNS varchar
 AS $$
 DECLARE
-	qi_usr_schema varchar := quote_ident(usr_schema);
-	qi_cdb_schema varchar := quote_ident(cdb_schema);
-	r RECORD;
+	qi_usr_schema varchar	:= quote_ident(usr_schema);
+	qi_cdb_schema varchar	:= quote_ident(cdb_schema);
+	view_type varchar		:= (CASE WHEN is_matview THEN 'MATERIALIZED VIEW' ELSE 'VIEW' END);
+	layer_approach varchar	:= (CASE WHEN is_joins THEN 'attribute joins' ELSE 'attribute table' END);
 	attri_count integer;
+	result_text text;
+	r RECORD;
 	
 BEGIN
 	-- Check if feature geometry metadata table exists
@@ -1376,7 +1446,9 @@ BEGIN
 		RAISE EXCEPTION '%.feature_attribute_metadata table not yet created. Please create it first', qi_usr_schema;
 	END IF;
 
-	-- Loop through all available feature geometries
+	result_text := concat(qi_cdb_schema,',', LOWER(view_type), ',', layer_approach);
+
+	-- Loop through all existing feature geometries
 	FOR r IN
 		EXECUTE format('
 		SELECT parent_objectclass_id AS p_oc_id, objectclass_id AS oc_id, geometry_name AS geom, lod AS lod
@@ -1403,7 +1475,7 @@ BEGIN
 		END IF;
 	END LOOP;
 
-RETURN cdb_schema;
+RETURN result_text;
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
@@ -1413,7 +1485,7 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION qgis_pkg.create_all_layer(varchar, varchar, boolean, boolean) IS 'Create all existing layers from the database with all existing attributes';
+COMMENT ON FUNCTION qgis_pkg.create_all_layer(varchar, varchar, boolean, boolean) IS 'Create all existing layers in the cdb_schema with all existing attributes';
 REVOKE EXECUTE ON FUNCTION qgis_pkg.create_all_layer(varchar, varchar, boolean, boolean) FROM public;
 -- Example
 -- SELECT * FROM qgis_pkg.create_all_layer('qgis_bstsai', 'citydb'); -- matview (TABLE)

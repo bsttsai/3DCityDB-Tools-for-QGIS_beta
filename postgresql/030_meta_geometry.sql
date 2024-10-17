@@ -1,3 +1,6 @@
+-- ***********************************************************************
+--
+-- This script installs a set of functions into qgis_pkg schema
 -- List of functions:
 --
 -- qgis_pkg.check_address_feature()
@@ -5,7 +8,8 @@
 -- qgis_pkg.check_space_feature()
 -- qgis_pkg.check_boundary_feature()
 -- qgis_pkg.update_feature_geometry_metadata()
-
+--
+-- ***********************************************************************
 
 ----------------------------------------------------------------
 -- Create FUNCTION QGIS_PKG.CHECK_ADDRESS_FEATURE

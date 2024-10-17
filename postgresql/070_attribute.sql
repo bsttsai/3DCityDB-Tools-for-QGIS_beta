@@ -1,3 +1,6 @@
+-- ***********************************************************************
+--
+-- This script installs a set of functions into qgis_pkg schema
 -- List of functions:
 --
 -- qgis_pkg.attribute_name_to_datatype_id()
@@ -20,7 +23,9 @@
 -- qgis_pkg.create_attribute_view()
 -- qgis_pkg.create_all_attribute_view_in_schema()
 -- qgis_pkg.drop_attribute_view()
--- qgis_pkg.drop_all_attribute_view()
+-- qgis_pkg.drop_all_attribute_views()
+--
+-- ***********************************************************************
 
 ----------------------------------------------------------------
 -- Create FUNCTION QGIS_PKG.ATTRIBUTE_NAME_TO_DATATYPE_ID()
@@ -1895,8 +1900,8 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_attribute_view(varchar, varchar, intege
 -- The function drops all existing attibute view and materialized view in the given schema
 -- If objectclass_id provided, drop all available attribute view and mv of that objectclass_id
 -- Otherwise, drop all attibute view in the schema
-DROP FUNCTION IF EXISTS qgis_pkg.drop_all_attribute_view(varchar, varchar, integer, boolean);
-CREATE OR REPLACE FUNCTION qgis_pkg.drop_all_attribute_view(
+DROP FUNCTION IF EXISTS qgis_pkg.drop_all_attribute_views(varchar, varchar, integer, boolean);
+CREATE OR REPLACE FUNCTION qgis_pkg.drop_all_attribute_views(
 	usr_schema varchar,
 	cdb_schema varchar,
 	objectclass_id integer DEFAULT NULL,
@@ -1952,15 +1957,15 @@ END IF;
 
 EXCEPTION
 	WHEN QUERY_CANCELED THEN
-		RAISE EXCEPTION 'qgis_pkg.drop_all_views: Error QUERY_CANCELED';
+		RAISE EXCEPTION 'qgis_pkg.drop_all_attribute_views: Error QUERY_CANCELED';
   	WHEN OTHERS THEN
-		RAISE EXCEPTION 'qgis_pkg.drop_all_views: %', SQLERRM;
+		RAISE EXCEPTION 'qgis_pkg.drop_all_attribute_views: %', SQLERRM;
 END;
 $$ LANGUAGE plpgsql;
-COMMENT ON FUNCTION qgis_pkg.drop_all_attribute_view(varchar, varchar, integer, boolean) IS 'If objectclass_id provided, drop all available attribute view and mv of that objectclass_id. Otherwise, drop all attibute view in the schema';
-REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_all_attribute_view(varchar, varchar, integer, boolean) FROM PUBLIC;
+COMMENT ON FUNCTION qgis_pkg.drop_all_attribute_views(varchar, varchar, integer, boolean) IS 'If objectclass_id provided, drop all available attribute view and mv of that objectclass_id. Otherwise, drop all attibute view in the schema';
+REVOKE EXECUTE ON FUNCTION qgis_pkg.drop_all_attribute_views(varchar, varchar, integer, boolean) FROM PUBLIC;
 --Example
--- SELECT * FROM qgis_pkg.drop_all_attribute_view('qgis_bstsai', 'citydb', 901); -- drop all 901 attribute views in citydb schema
--- SELECT * FROM qgis_pkg.drop_all_attribute_view('qgis_bstsai', 'citydb', 901, TRUE); -- drop all attribute matviews in citydb schema
--- SELECT * FROM qgis_pkg.drop_all_attribute_view('qgis_bstsai', 'alderaan'); -- drop all attribute views in citydb schema
--- SELECT * FROM qgis_pkg.drop_all_attribute_view('qgis_bstsai', 'alderaan', NULL, TRUE); -- drop all attribute matviews in citydb schema
+-- SELECT * FROM qgis_pkg.drop_all_attribute_views('qgis_bstsai', 'citydb', 901); -- drop all 901 attribute views in citydb schema
+-- SELECT * FROM qgis_pkg.drop_all_attribute_views('qgis_bstsai', 'citydb', 901, TRUE); -- drop all attribute matviews in citydb schema
+-- SELECT * FROM qgis_pkg.drop_all_attribute_views('qgis_bstsai', 'alderaan'); -- drop all attribute views in citydb schema
+-- SELECT * FROM qgis_pkg.drop_all_attribute_views('qgis_bstsai', 'alderaan', NULL, TRUE); -- drop all attribute matviews in citydb schema

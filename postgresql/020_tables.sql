@@ -1,3 +1,8 @@
+
+-- ***********************************************************************
+--
+-- This script creates a set of tables into qgis_pkg schema
+-- feature_geometry_metadata, feature_attribute_metadata and layer_metadata tables will be duplicated under newly created usr_schema
 -- List of tables:
 --
 -- qgis_pkg.usr_schema()

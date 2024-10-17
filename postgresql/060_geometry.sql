@@ -1,3 +1,23 @@
+-- ***********************************************************************
+--
+-- This script installs a set of functions into qgis_pkg schema
+-- List of functions:
+--
+-- qgis_pkg.get_geometry_key_id()
+-- qgis_pkg.create_geometry_space_feature()
+-- qgis_pkg.create_geometry_boundary_feature()
+-- qgis_pkg.create_geometry_relief_feature()
+-- qgis_pkg.create_geometry_relief_component()
+-- qgis_pkg.create_geometry_address()
+-- qgis_pkg.create_geometry_view()
+-- qgis_pkg.create_all_geometry_view_in_schema()
+-- qgis_pkg.refresh_geometry_materialized_view()
+-- qgis_pkg.refresh_all_geometry_materialized_view()
+-- qgis_pkg.drop_geometry_view()
+-- qgis_pkg.drop_all_geometry_views()
+
+-- ***********************************************************************
+
 ----------------------------------------------------------------
 -- Create FUNCTION QGIS_PKG.GET_GEOMETRY_KEY_ID()
 ----------------------------------------------------------------
@@ -76,7 +96,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.get_geometry_key_id(varchar, varchar, intege
 
 
 ----------------------------------------------------------------
--- Create FUNCTION QGIS_PKG.CREATE_SPACE_FEATURE_GEOMETRY()
+-- Create FUNCTION QGIS_PKG.CREATE_GEOMETRY_SPACE_FEATURE()
 ----------------------------------------------------------------
 --  The function returns the sql for creating geometry view of space feature
 DROP FUNCTION IF EXISTS qgis_pkg.create_geometry_space_feature(varchar, integer, text, text, integer, integer, text, boolean);
@@ -201,7 +221,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.create_geometry_space_feature(varchar, integ
 
 
 ----------------------------------------------------------------
--- Create FUNCTION QGIS_PKG.CREATE_BOUNDARY_FEATURE_GEOMETRY()
+-- Create FUNCTION QGIS_PKG.CREATE_GEOMETRY_BOUNDARY_FEATURE()
 ----------------------------------------------------------------
 --  The function returns the sql for creating geometry view of boundary feature
 DROP FUNCTION IF EXISTS qgis_pkg.create_geometry_boundary_feature(varchar, integer, integer, text, text, integer, integer, text, boolean);
@@ -277,7 +297,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.create_geometry_boundary_feature(varchar, in
 
 
 ----------------------------------------------------------------
--- Create FUNCTION QGIS_PKG.CREATE_RELIEF_FEATURE_GEOMETRY()
+-- Create FUNCTION QGIS_PKG.CREATE_GEOMETRY_RELIEF_FEATURE()
 ----------------------------------------------------------------
 --  The function returns the sql for creating geometry view of relief feature
 DROP FUNCTION IF EXISTS qgis_pkg.create_geometry_relief_feature(varchar, integer, text, text, text, integer, text, boolean);
@@ -342,7 +362,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.create_geometry_relief_feature(varchar, inte
 
 
 ----------------------------------------------------------------
--- Create FUNCTION QGIS_PKG.CREATE_RELIEF_COMPONENT_GEOMETRY()
+-- Create FUNCTION QGIS_PKG.CREATE_GEOMETRY_RELIEF_COMPONENT()
 ----------------------------------------------------------------
 --  The function returns the sql for creating geometry view of relief feature
 DROP FUNCTION IF EXISTS qgis_pkg.create_geometry_relief_component(varchar, integer, text, text, text, integer, text, boolean);
@@ -409,7 +429,7 @@ REVOKE EXECUTE ON FUNCTION qgis_pkg.create_geometry_relief_component(varchar, in
 
 
 ----------------------------------------------------------------
--- Create FUNCTION QGIS_PKG.CREATE_ADDRESS_GEOMETRY()
+-- Create FUNCTION QGIS_PKG.CREATE_GEOMETRY_ADDRESS()
 ----------------------------------------------------------------
 --  The function returns the sql for creating geometry view of address
 DROP FUNCTION IF EXISTS qgis_pkg.create_geometry_address(varchar, integer, text, boolean);
