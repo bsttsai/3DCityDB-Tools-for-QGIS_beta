@@ -43,7 +43,7 @@ This repository provides server-side support to 3DCityDB-Tools Plug-In for QGIS,
 </p>
 
 ## Acknowledgments
-- TU Delft 3D Geoinformation Group ([3DCityDB-Tools for QGIS](https://github.com/tudelft3d/3dcitydb-tools-plugin-qgis))
+- TU Delft 3D Geoinformation Group ([3DCityDB-Tools for QGIS](https://github.com/tudelft3d/3DCityDB-Tools-for-QGIS))
 - Virtual City Systems GmbH ([3DCityDB](https://www.3dcitydb.org/))
 
 ## Support
