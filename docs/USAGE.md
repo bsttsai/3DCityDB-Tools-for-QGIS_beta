@@ -124,10 +124,9 @@ The metadata tables provide options for:
 <details>
 <summary>Create Single Layer</summary>
 
-### qgis_pkg.create_layer()
+`qgis_pkg.create_layer()`
 
-**Required Parameters:**
-
+Required Parameters:
 1. **usr_schema**: User schema name
 2. **cdb_schema**: Target 3DCityDB schema name
 3. **parent_objectclass_id**: Only for boundary features, 0 for space feature
@@ -135,7 +134,7 @@ The metadata tables provide options for:
 5. **geometry_name**: Spatial property name (e.g. `lod1Solid`, `tin`)
 6. **lod**: Level of Detail number
 
-**Optional Parameters:**
+Optional Parameters:
 
 7. **attris**: Selected attribute names in text array (Default: null)
 8. **is_matview**: Store the query as view or materialized view (Default: null)
@@ -147,6 +146,8 @@ The metadata tables provide options for:
 <details>
 <summary>Create Multiple Layers</summary>
 
+`qgis_pkg.create_class_layers()`
+
 1. **For Single Class:**
 ```sql
 -- Building class (objectclass_id = 901)
@@ -154,6 +155,8 @@ SELECT * FROM qgis_pkg.create_class_layers('usr_schema', 'cdb_schema', NULL, 901
 ```
 
 2. **For All Classes:**
+`qgis_pkg.create_all_layers()`
+
 ```sql
 -- All existing classes in the cdb_schema
 SELECT * FROM qgis_pkg.create_all_layer('usr_schema', 'cdb_schema');
@@ -166,21 +169,26 @@ SELECT * FROM qgis_pkg.create_all_layer('usr_schema', 'cdb_schema');
 <summary>Layer Deletion Options</summary>
 
 #### Individual Layer Deletion
-**qgis_pkg.drop_single_layer_attri_table()**
+`qgis_pkg.drop_single_layer_attri_table()`
 
-**Parameters:**
+Required Parameters:
 1. **usr_schema**: User schema name
 2. **cdb_schema**: CityDB schema name
 3. **parent_objectclass_id**: NULL for space feature
 4. **objectclass_id**: Feature class ID
 5. **geometry_name**: Geometry column name
 6. **lod**: Level of Detail
+
+Optional Parameters:
+
 7. **attris**: Attribute names array (Default: null)
 8. **is_matview**: View type (Default: null)
 9. **is_all_attri**: All attributes flag (Default: null)
 10. **is_drop_attris**: Cascade drop flag (Default: null)
 
 #### Batch Deletion
+`qgis_pkg.drop_class_layers_attri_table()`
+
 1. **Delete Layers of aSingle Class:**
 ```sql
 -- Building class (objectclass_id = 901)
@@ -188,6 +196,8 @@ SELECT * FROM qgis_pkg.drop_class_layers_attri_table('usr_schema', 'cdb_schema',
 ```
 
 2. **Delete All Layers:**
+`qgis_pkg.drop_all_layer()`
+
 ```sql
 -- All existing classes in the cdb_schema
 SELECT * FROM qgis_pkg.drop_all_layer('usr_schema', 'cdb_schema');
