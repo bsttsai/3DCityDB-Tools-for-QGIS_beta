@@ -98,9 +98,9 @@ SELECT * FROM qgis_pkg.update_feature_attribute_metadata('usr_schema', 'cdb_sche
 
 ## Layer Operations
 
-### Creation Methods
-
-#### Layer Creation Approach
+### Layer Creation Approach
+<details>
+<summary>Layer Creation Approach</summary>
 The metadata tables provide options for:
 
 **Geometries:**
@@ -119,11 +119,13 @@ The metadata tables provide options for:
 <p align="center"> 
     <img src="../docs/images/layer approach.png" alt="layer_2"/> 
 </p>
+</details>
 
-#### Individual Layer Creation
+### Creation Methods
 <details>
 <summary>Create Single Layer</summary>
 
+#### Individual Layer Creation
 `qgis_pkg.create_layer()`
 
 Required Parameters:
@@ -142,10 +144,11 @@ Optional Parameters:
 10. **is_joins**: Join method selection (Default: null)
 </details>
 
-#### Batch Layer Creation
+
 <details>
 <summary>Create Multiple Layers</summary>
 
+#### Batch Layer Creation
 1. **For Single Class:**
 `qgis_pkg.create_class_layers()`
 ```sql
@@ -165,7 +168,7 @@ SELECT * FROM qgis_pkg.create_all_layer('usr_schema', 'cdb_schema');
 ### Deletion Methods
 
 <details>
-<summary>Layer Deletion Options</summary>
+<summary>Delete Single Layer</summary>
 
 #### Individual Layer Deletion
 `qgis_pkg.drop_single_layer_attri_table()`
@@ -185,8 +188,12 @@ Optional Parameters:
 9. **is_all_attri**: All attributes flag (Default: null)
 10. **is_drop_attris**: Cascade drop flag (Default: null)
 
-#### Batch Deletion
+</details>
 
+<details>
+<summary>Delete Multiple Layers</summary>
+
+#### Batch Deletion
 1. **Delete Layers of a Single Class:**
 `qgis_pkg.drop_class_layers_attri_table()`
 ```sql
@@ -203,10 +210,10 @@ SELECT * FROM qgis_pkg.drop_all_layer('usr_schema', 'cdb_schema');
 ```
 </details>
 
-### Layer Naming Convention
 <details>
 <summary>Understanding Layer Names</summary>
 
+### Layer Naming Convention
 1. **GIS Layer Names:**
 - Prefix: `=lmv` (layer materialized view)
 - Components: `cdb_schema_class-alias_lod_geometry-type`
@@ -226,7 +233,9 @@ Layer information stored in `layer_metadata`:
 ## Examples
 
 ### Space Feature with Specific Attributes Example
-Creating a Building layer with specific attributes:
+<details>
+<summary>Creating a layer of Building class (objectclass_id = 901) with specified attributes</summary>
+
 ```sql
 SELECT * FROM qgis_pkg.create_layer(
     'usr_schema', 
@@ -247,9 +256,12 @@ Result:
 Generated views:
 - `=lmv_alderaan_bgd_lod1_Solid_attri_table`
 - `_amv_alderaan_Building_g_[ID]_attributes`
+</details>
 
 ### Boundary Feature with All Attributes Example
-Creating a RoofSurface layer with all attributes:
+<details>
+<summary>Creating a layer of Building-RoofSurface class (objectclass_id: 901-712) with all existing attributes</summary><br>
+
 ```sql
 SELECT * FROM qgis_pkg.create_layer(
     'usr_schema', 
@@ -271,12 +283,17 @@ Result:
 Generated views:
 - `=lmv_alderaan_bgd_roof_surf_lod2_MSurf_attri_table`
 - `_amv_alderaan_RoofSurface_g_[ID]_attributes`
+</details>
 
 ### Batch Layer Creation Example
+<details>
+<summary>Create Layers for All Classes</summary><br>
+
 Creating layers for all existing classes in the `cdb_schema`:
 ```sql
 SELECT * FROM qgis_pkg.create_all_layer('usr_schema', 'cdb_schema');
 ```
+
 - Railway dataset result:
     <p align="center"> 
     <img src="../docs/images/railway_2D.png" alt="railway_2D"/> 
@@ -317,10 +334,14 @@ SELECT * FROM qgis_pkg.create_all_layer('usr_schema', 'cdb_schema');
     <p align="center"> 
     <img src="../docs/images/nyc_3d.png" alt="ny_3d"/> 
     </p>
+</details>
 
 ## Limitations & Future Work
 
 ### GIS Layer Editing Support is Under Development
+<details>
+<summary>Potential Approaches</summary><br>
+
 The current implementation stores GIS layers as materialized views, which do not inherently support updates. This means that edits made to feature attributes in QGIS cannot be directly propagated back to the underlying 3DCityDB 5.0 database.
 
 Future development will focus on enabling bidirectional editing capabilities, allowing users to modify feature attributes through the GIS layers while maintaining data consistency with 3DCityDB 5.0. Some potential approaches being considered include:
@@ -330,9 +351,13 @@ Future development will focus on enabling bidirectional editing capabilities, al
 - Developing an intermediate layer to handle view updates and database synchronization
 
 This enhancement will provide a more complete workflow for interacting with 3D city model data through QGIS, while preserving data integrity in the underlying 3DCityDB structure.
+</details>
 
 
 ### Limited Support for Features without Direct Spatial Properties
+<details>
+<summary>Two alternative approaches</summary><br>
+
 Currently, features without direct geometry representations (e.g., traffic spaces in transportation data) have limited visualisation via GIS layers. Two potential approaches are being considered for future development:
 
 1. **Feature Bounding Box Envelopes**
@@ -396,6 +421,7 @@ Future work will focus on implementing both approaches to provide comprehensive 
 </td>
 </tr>
 </table>
+</details>
 
 ### Nota Bene
 - Keep the names of  `cdb_schema` short, otherwise PostgreSQL will auto-truncate the layer names and, which will cause the failure of `create_layer()` function.
