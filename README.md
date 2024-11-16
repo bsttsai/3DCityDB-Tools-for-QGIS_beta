@@ -10,6 +10,7 @@ This repository provides server-side support to 3DCityDB-Tools Plug-In for QGIS,
   <img src="docs/images/logo.png" alt="logo 3DCityDB Tools server-side support for 3DCityDB 5.0" width="200" />
 </p>
 
+
 ## Quick Start
 1. Install PostgreSQL & PostGIS
 2. Set up 3DCityDB 5.0 and import data
@@ -31,9 +32,18 @@ This repository provides server-side support to 3DCityDB-Tools Plug-In for QGIS,
 
   For managing PostgreSQL, the open-source tool [pgAdmin4](https://www.pgadmin.org/) is in use and is recommended.
 
+## Demo
+<p align="center">
+<br>
+<kbd>
+<a href="https://drive.google.com/file/d/1DQMauAGE3JKBcGCiTsvTX5V0qBaqZ0F8/view?usp=sharing" target="_blank">
+<img style="border:1px solid black;" src="docs/images/demo_cover.png" width="600"/></a>
+</kbd>
+<br><br>
+</p>
 
 ## Acknowledgments
-- TU Delft 3D Geoinformation Group ([3DCityDB-Tools for QGIS](https://github.com/tudelft3d/3dcitydb-tools-plugin-qgis))
+- TU Delft 3D Geoinformation Group ([3DCityDB-Tools for QGIS](https://github.com/tudelft3d/3DCityDB-Tools-for-QGIS))
 - Virtual City Systems GmbH ([3DCityDB](https://www.3dcitydb.org/))
 
 ## Support
