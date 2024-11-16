@@ -146,9 +146,8 @@ Optional Parameters:
 <details>
 <summary>Create Multiple Layers</summary>
 
-`qgis_pkg.create_class_layers()`
-
 1. **For Single Class:**
+`qgis_pkg.create_class_layers()`
 ```sql
 -- Building class (objectclass_id = 901)
 SELECT * FROM qgis_pkg.create_class_layers('usr_schema', 'cdb_schema', NULL, 901);
@@ -187,9 +186,9 @@ Optional Parameters:
 10. **is_drop_attris**: Cascade drop flag (Default: null)
 
 #### Batch Deletion
-`qgis_pkg.drop_class_layers_attri_table()`
 
-1. **Delete Layers of aSingle Class:**
+1. **Delete Layers of a Single Class:**
+`qgis_pkg.drop_class_layers_attri_table()`
 ```sql
 -- Building class (objectclass_id = 901)
 SELECT * FROM qgis_pkg.drop_class_layers_attri_table('usr_schema', 'cdb_schema', NULL, 901);
