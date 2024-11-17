@@ -17,6 +17,9 @@
   - [Boundary Feature with All Attributes Example](#boundary-feature-with-all-attributes-example)
   - [Batch Layer Creation Example](#batch-layer-creation-example)
 - [Limitations & Future Work](#limitations--future-work)
+  - [GIS Layer Editing Support is Under Development](#gis-layer-editing-support-is-under-development)
+  - [Limited Support for Features without Direct Spatial Properties](#limited-support-for-features-without-direct-spatial-properties)
+- [Nota Bene](#nota-bene)
 
 ## Setup
 
