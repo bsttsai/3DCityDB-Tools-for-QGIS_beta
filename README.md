@@ -17,7 +17,7 @@ This repository provides server-side support to 3DCityDB-Tools Plug-In for QGIS,
 3. Install QGIS package
 4. Check existence of feature geometries and attributes
 5. Create GIS layers
-6. Interact with CityGML data via layers inQGIS
+6. Interact with CityGML data via layers in QGIS
 
 ## Quick Links
 - [Introduction](docs/INTRODUCTION.md)
