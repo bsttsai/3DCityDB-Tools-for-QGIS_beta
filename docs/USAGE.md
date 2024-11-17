@@ -22,7 +22,7 @@
 
 ### Package Installation
 <details>
-<summary>Installation Steps</summary>
+<summary>Installation Steps</summary><br>
 
 1. Download and unzip the package of this repository
 2. Open pgAdmin4
@@ -33,12 +33,11 @@
 
 ### User Schema Creation
 <details>
-<summary>Create User Schema</summary>
+<summary>Create user schema for storing metadata tables and GIS layers</summary><br> 
 
-Create a new user schema for storing metadata tables and GIS layers:
-  ```sql
-  SELECT * FROM qgis_pkg.create_qgis_usr_schema('usr_name');
-  ```
+```sql
+SELECT * FROM qgis_pkg.create_qgis_usr_schema('usr_name');
+```
 
 The created schema (`qgis_usr_name`) contains 4 tables:
 1. **extents**: Stores bounding box geometries for extent selection
@@ -51,7 +50,7 @@ The created schema (`qgis_usr_name`) contains 4 tables:
 
 ### Extent Specification
 <details>
-<summary>Two types of extent specification are available</summary>
+<summary>Two types of extent specification</summary><br>
 
 1. **Full Database Extent** (`db_schema` type, default):
     ```sql
@@ -77,38 +76,40 @@ The extent type determines the bounding boxes used for:
 ### Metadata Management
 
 <details>
-<summary>Geometry Metadata</summary>
+<summary>Check Existing Geometries</summary><br>
 
 1. **Full Schema Scan** (default):
-```sql
-SELECT * FROM qgis_pkg.update_feature_geometry_metadata('usr_schema', 'cdb_schema');
-```
+    ```sql
+    SELECT * FROM qgis_pkg.update_feature_geometry_metadata('usr_schema', 'cdb_schema');
+    ```
 
 2. **Extent-Based Scan**:
-```sql
-SELECT * FROM qgis_pkg.update_feature_geometry_metadata('usr_schema', 'cdb_schema', 'm_view');
-```
+    ```sql
+    SELECT * FROM qgis_pkg.update_feature_geometry_metadata('usr_schema', 'cdb_schema', 'm_view');
+    ```
 
-Results stored in `feature_geometry_metadata`:
+Results stored in `feature_geometry_metadata` table under the `usr_schema`:
 <p align="center"> 
 <img src="../docs/images/meta_geom.png" alt="meta_geom"/> 
 </p>
 </details>
 
 <details>
-<summary>Attribute Metadata</summary>
+<summary>Check Existing Attributes</summary><br>
 
 Similar scanning options:
 
 1. **Full Schema Scan** (default):
-```sql
-SELECT * FROM qgis_pkg.update_feature_attribute_metadata('usr_schema', 'cdb_schema');
-```
+    ```sql
+    SELECT * FROM qgis_pkg.update_feature_attribute_metadata('usr_schema', 'cdb_schema');
+    ```
 
 2. **Extent-Based Scan**:
-```sql
-SELECT * FROM qgis_pkg.update_feature_attribute_metadata('usr_schema', 'cdb_schema', 'm_view');
-```
+    ```sql
+    SELECT * FROM qgis_pkg.update_feature_attribute_metadata('usr_schema', 'cdb_schema', 'm_view');
+    ```
+
+Results stored in `feature_attribute_metadata` table under the `usr_schema`:
 <p align="center"> 
 <img src="../docs/images/meta_attri.png" alt="meta_attri"/> 
 </p>
@@ -118,7 +119,8 @@ SELECT * FROM qgis_pkg.update_feature_attribute_metadata('usr_schema', 'cdb_sche
 
 ### Layer Creation Approach
 <details>
-<summary>Attribute Table Approach</summary>
+<summary>Attribute Table Approach</summary><br>
+
 The metadata tables provide options for:
 
 **Geometries:**
@@ -214,35 +216,36 @@ Optional Parameters:
 #### Batch Deletion
 1. **Delete Layers of a Single Class:**
 `qgis_pkg.drop_class_layers_attri_table()`
-```sql
--- Building class (objectclass_id = 901)
-SELECT * FROM qgis_pkg.drop_class_layers_attri_table('usr_schema', 'cdb_schema', NULL, 901);
-```
+    ```sql
+    -- Building class (objectclass_id = 901)
+    SELECT * FROM qgis_pkg.drop_class_layers_attri_table('usr_schema', 'cdb_schema', NULL, 901);
+    ```
 
 2. **Delete All Layers:**
 `qgis_pkg.drop_all_layer()`
 
-```sql
--- All existing classes in the cdb_schema
-SELECT * FROM qgis_pkg.drop_all_layer('usr_schema', 'cdb_schema');
-```
+    ```sql
+    -- All existing classes in the cdb_schema
+    SELECT * FROM qgis_pkg.drop_all_layer('usr_schema', 'cdb_schema');
+    ```
 </details>
 
 <details>
 <summary>Understanding Layer Names</summary>
 
 ### Layer Naming Convention
+
 1. **GIS Layer Names:**
-- Prefix: `=lmv` (layer materialized view)
-- Components: `cdb_schema_class-alias_lod_geometry-type`
-- Suffix: `attri_table` or `no_attri_table`
+  - Prefix: `=lmv` (layer materialized view)
+  - Components: `cdb_schema_class-alias_lod_geometry-type`
+  - Suffix: `attri_table` or `no_attri_table`
 
 2. **Attribute Table Names:**
 - Prefix: `_amv` (attribute materialized view)
 - Components: `cdb_schema_class-name_g_[ID]`
 - Suffix: `attributes`
 
-Layer information stored in `layer_metadata`:
+Layer information stored in `layer_metadata` table under the `usr_schema`:
 <p align="center"> 
   <img src="../docs/images/meta_layer.png" alt="meta_layer"/> 
 </p>
@@ -252,7 +255,7 @@ Layer information stored in `layer_metadata`:
 
 ### Space Feature with Specific Attributes Example
 <details>
-<summary>Creating a layer of Building class (objectclass_id = 901) with specified attributes</summary>
+<summary>Creating a layer of Building class (objectclass_id = 901) with specified attributes</summary><br>
 
 ```sql
 SELECT * FROM qgis_pkg.create_layer(
@@ -280,18 +283,18 @@ Generated views:
 <details>
 <summary>Creating a layer of Building-RoofSurface class (objectclass_id: 901-712) with all existing attributes</summary><br>
 
-```sql
-SELECT * FROM qgis_pkg.create_layer(
-    'usr_schema', 
-    'cdb_schema', 
-    901,                           -- Parent: Building
-    712,                           -- RoofSurface class ID
-    'lod2MultiSurface',            -- Geometry type
-    2,                             -- LoD number
-    NULL,                          -- No specific attributes
-    TRUE,                          -- As materialized view
-    TRUE                           -- All attributes
-);
+  ```sql
+  SELECT * FROM qgis_pkg.create_layer(
+      'usr_schema', 
+      'cdb_schema', 
+      901,                           -- Parent: Building
+      712,                           -- RoofSurface class ID
+      'lod2MultiSurface',            -- Geometry type
+      2,                             -- LoD number
+      NULL,                          -- No specific attributes
+      TRUE,                          -- As materialized view
+      TRUE                           -- All attributes
+  );
 ```
 Result:
 <p align="center"> 
