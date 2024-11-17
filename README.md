@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/yourusername/repo/releases)
 
-This repository provides server-side support to 3DCityDB-Tools Plug-In for QGIS, enabling GIS layer-based interaction with 3D city model data from 3DCityDB 5.0. For detailed information about the project, see the [Introduction](docs/INTRODUCTION.md).
+This repository provides server-side support to 3DCityDB-Tools Plug-In for QGIS, enabling GIS layer-based interaction with 3D city model data stored within 3DCityDB 5.0.
 <!-- This repository contains the work of the master's thesis titled **"3DCityDB-Tools plug-in for QGIS: Adding server-side support to 3DCityDB v.5.0,"** which includes trial updates on the server side of 3DCityDB-Tools-for-QGIS tailored for 3DCityDB v.5.0. The full document is available on the [TU Delft Library](https://repository.tudelft.nl/record/uuid:5992ba24-8618-48d7-9e24-28839b5da16b). -->
 
 <p align="center">
@@ -51,7 +51,7 @@ This repository provides server-side support to 3DCityDB-Tools Plug-In for QGIS,
 - Contact: bstsai1022@gmail.com
 
 ## Citation
-If you would like to get further information of this repository work, please have a look at my MSc thesis:
+If you would like to get further information of the work of this repository, please have a look at the MSc thesis:
 
 Tsai, B. S. (2024). 3DCityDB-Tools plug-in for QGIS: Adding server-side support to 3DCityDB
 v.5.0 [[Link](https://repository.tudelft.nl/record/uuid:5992ba24-8618-48d7-9e24-28839b5da16b)] [[BibTeX](docs/CITATION.bib)]

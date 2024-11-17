@@ -1,4 +1,5 @@
 # Usage Guide
+[← Back to README](../README.md)
 
 ## Table of Contents
 - [Setup](#setup)
@@ -20,53 +21,63 @@
 ## Setup
 
 ### Package Installation
+<details>
+<summary>Installation Steps</summary>
+
 1. Download and unzip the package of this repository
 2. Open pgAdmin4
 3. Create new query tool tab
 4. Execute all SQL script files in order under the `postgresql` folder
 5. Verify successful installation of `qgis_pkg` schema
+</details>
 
 ### User Schema Creation
+<details>
+<summary>Create User Schema</summary>
+
 Create a new user schema for storing metadata tables and GIS layers:
-```sql
-SELECT * FROM qgis_pkg.create_qgis_usr_schema('usr_name');
-```
+  ```sql
+  SELECT * FROM qgis_pkg.create_qgis_usr_schema('usr_name');
+  ```
 
 The created schema (`qgis_usr_name`) contains 4 tables:
 1. **extents**: Stores bounding box geometries for extent selection
 2. **feature_geometry_metadata**: Stores metadata of existing feature geometries
 3. **feature_attribute_metadata**: Stores metadata of existing feature attributes
 4. **layer_metadata**: Stores user choices for generated GIS layers
+</details>
 
 ## Configuration
 
 ### Extent Specification
-Two types of extent specification are available:
+<details>
+<summary>Two types of extent specification are available</summary>
 
 1. **Full Database Extent** (`db_schema` type, default):
-```sql
-SELECT * FROM qgis_pkg.upsert_extents('usr_schema', 'cdb_schema');
-```
+    ```sql
+    SELECT * FROM qgis_pkg.upsert_extents('usr_schema', 'cdb_schema');
+    ```
 
 2. **Custom Extent** (`m_view` type):
-```sql
-SELECT * FROM qgis_pkg.upsert_extents(
-    'usr_schema', 
-    'cdb_schema', 
-    'm_view', 
-    ST_MakeEnvelope(232320, 480620, 232615, 481025, 28992)
-);
-```
+    ```sql
+    SELECT * FROM qgis_pkg.upsert_extents(
+        'usr_schema', 
+        'cdb_schema', 
+        'm_view', 
+        ST_MakeEnvelope(232320, 480620, 232615, 481025, 28992)
+    );
+    ```
 
 The extent type determines the bounding boxes used for:
 - Checking existing feature geometries
 - Checking existing attributes
 - Creating GIS layers
+</details>
 
 ### Metadata Management
 
-#### Geometry Metadata
-Two scanning options available:
+<details>
+<summary>Geometry Metadata</summary>
 
 1. **Full Schema Scan** (default):
 ```sql
@@ -82,8 +93,11 @@ Results stored in `feature_geometry_metadata`:
 <p align="center"> 
 <img src="../docs/images/meta_geom.png" alt="meta_geom"/> 
 </p>
+</details>
 
-#### Attribute Metadata
+<details>
+<summary>Attribute Metadata</summary>
+
 Similar scanning options:
 
 1. **Full Schema Scan** (default):
@@ -95,12 +109,16 @@ SELECT * FROM qgis_pkg.update_feature_attribute_metadata('usr_schema', 'cdb_sche
 ```sql
 SELECT * FROM qgis_pkg.update_feature_attribute_metadata('usr_schema', 'cdb_schema', 'm_view');
 ```
+<p align="center"> 
+<img src="../docs/images/meta_attri.png" alt="meta_attri"/> 
+</p>
+</details>  
 
 ## Layer Operations
 
 ### Layer Creation Approach
 <details>
-<summary>Layer Creation Approach</summary>
+<summary>Attribute Table Approach</summary>
 The metadata tables provide options for:
 
 **Geometries:**
