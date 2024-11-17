@@ -1,5 +1,7 @@
 # 3DCityDB 5.0 Installation & Data Import Guide
 
+[← Back to README](../README.md)
+
 ## Step 1: Install PostgreSQL
   Install PostgreSQL, which can be done using the [EDB installer](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads). Download and unzip the [3DCityDB 5.0 Command line tool](https://github.com/3dcitydb/citydb-tool) package.
 
